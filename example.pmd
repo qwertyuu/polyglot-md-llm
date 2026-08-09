@@ -1,0 +1,34 @@
+---
+pmd: "0.1"
+title: "Signal analysis"
+timeout_default: "30s"
+---
+# Signal analysis
+
+A minimal polyglot notebook. Each cell is isolated; data crosses boundaries through ctx.
+
+```python {#generate independent=true tags=demo}
+ctx.values = [3, 8, 13, 21, 34]
+values = ctx.values
+print(f"Generated {len(values)} observations")
+```
+
+
+
+```python {#summarize depends-on=generate}
+values = ctx.values
+average = sum(values) / len(values)
+ctx.average = average
+print(f"Mean signal: {average:.2f}")
+display.markdown(f"## Result\n\nThe mean signal is **{average:.2f}**.", name="summary")
+```
+
+
+
+```python {#verify role=test test-of=summarize}
+assert ctx.average > 0
+print("Average is positive")
+```
+
+
+
