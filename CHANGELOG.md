@@ -6,6 +6,8 @@
   Windows-only `.venv/Scripts/python.exe` path.
 - Preserve the SHA-256 cache key when validating typed `produces=` outputs;
   output names no longer replace the digest stored in results and receipts.
+- Retry transient Windows atomic-replacement failures when concurrent runs
+  update cache or `stale-after` freshness records.
 
 ## 0.6.0 - 2026-08-24
 
