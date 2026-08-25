@@ -19,6 +19,58 @@ that address each item in `known-issues.md`.
 > PMD cells execute arbitrary code with the privileges of the user running
 > `pmd`. Review a document before running, testing, or rendering it.
 
+## Five-minute mental model
+
+Each executable cell runs as an isolated operating-system process. Nothing in a
+Python variable, import cache, or working memory crosses a cell boundary.
+There are four deliberately different ways cells relate:
+
+| Mechanism | What moves | Why it exists |
+| --- | --- | --- |
+| `depends-on` | execution ordering and visibility | makes an upstream result available before a consumer starts |
+| `ctx` | JSON values | passes small, portable values such as settings, lists, and summaries |
+| outputs | files | passes plots, tables, models, and other non-JSON artifacts |
+| `uses` | source text | composes a shared `role=lib` helper into an isolated process |
+
+This complete example uses all four. `common` is source composition, `prepare`
+establishes order and sends JSON, `plot` writes a file, and `review` consumes the
+file through the dependency-output helper:
+
+````markdown
+```python {#common role=lib}
+from pathlib import Path
+def mean(values): return sum(values) / len(values)
+```
+
+```python {#prepare role=setup uses=common independent=true}
+ctx.values = [2, 4, 8]
+ctx.average = mean(ctx.values)
+```
+
+```python {#plot depends-on=prepare uses=common}
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots(); ax.plot(ctx.values)
+display.figure(fig, "trend.png")
+```
+
+```python {#review depends-on=plot}
+assert outputs.path("plot", "trend.png").is_file()
+print(ctx.average)
+```
+````
+
+Use a bare fence for the simple path; PMD assigns an ID automatically and uses
+normal notebook order. Add IDs, dependencies, context, artifacts, and `uses`
+only when the notebook needs them.
+
+`role=setup` is the convention for the first executable cell: resolve project
+settings, create directories, and put JSON configuration in `ctx`. For Python,
+`project_root`/`project_dir` resolves to the nearest `pmd.yaml`, `pyproject.toml`,
+or Git root, and `output_path("tables/result.csv")` creates a safe output path.
+Use `display.figure(fig, "plot.png")` to save and register a Matplotlib figure
+in one call. Any file already written under `PMD_CELL_OUT` is collected
+automatically, so it does not need a `display.image()` call.
+
 ## Install
 
 From this checkout:
@@ -30,6 +82,7 @@ pmd run pmd-impl/example.pmd --fresh
 pmd run pmd-impl/example.pmd --verbose --out-dir pmd-outputs
 pmd test pmd-impl/example.pmd
 pmd render pmd-impl/example.pmd --to html
+pmd render pmd-impl/example.pmd --to text
 ```
 
 Once published:
@@ -40,6 +93,25 @@ python -m pip install polyglot-pmd
 
 Python 3.10 or newer is required. The package depends only on PyYAML and
 markdown-it-py. Language interpreters used by a document must also be installed.
+
+## Document and composition workflows
+
+PMD 0.6 adds reader-visible validation and callable contracts:
+
+```console
+pmd render report.pmd --to text
+pmd render report.pmd --to html --hide-graph --hide-source
+pmd run report.pmd --set tuiles.canada=1600
+pmd run report.pmd --sweep tuiles.canada=1400,1568,1800
+pmd run report.pmd --compare-with RUN_ID
+pmd call report.pmd --input '{"tuiles":{"canada":1600}}' --output totaux
+```
+
+Use `stale-after=30d` on measurement cells. A Python
+`role=test test-of=document` cell can assert over `rendered.text`. Typed outputs
+use `produces=totaux:schema#totals` with JSON Schema definitions under
+frontmatter `schemas`. Frontmatter `capabilities.network` and
+`capabilities.ssh` declare external hosts for static inspection.
 
 ## Library API
 
@@ -144,6 +216,8 @@ Write `.png`, `.jpg`, `.jpeg`, `.svg`, `.csv`, `.md`, or any other attachment
 under `PMD_CELL_OUT`. The HTML renderer embeds all files and makes no network
 requests. Python also receives `display.markdown`, `display.csv`,
 `display.image`, and `display.file` convenience methods.
+`display.csv` accepts CSV text or a list of dictionaries; ambiguous values
+raise `TypeError` instead of being stringified silently.
 
 ### Dependency outputs
 
@@ -168,7 +242,8 @@ print successful cells' captured stdout and stderr in addition to statuses.
 
 Successful dependency results are cached under `PMD_CACHE_DIR`, or
 `~/.cache/polyglot-pmd` by default. Keys include source, attributes, engine
-command, and the resolved transitive context. `--fresh` bypasses reads. A cell
+command, resolved interpreter identity/version, and the resolved transitive
+context. `--fresh` bypasses reads. A cell
 named by `--cell` always executes; only its dependencies may come from cache.
 Context itself remains scoped to one invocation.
 
@@ -200,10 +275,49 @@ engines:
 On POSIX, the corresponding command would normally end in `.venv/bin/python`.
 This selects an existing environment; PMD still does not provision packages.
 
+For portable projects, run `pmd` from the project's virtual environment, or
+commit a project-level `pmd.yaml` with an interpreter command. `pmd init`
+creates both that configuration and a minimal `notebook.pmd`; `{project_dir}`
+in the command expands to the project root. On Windows its initial template
+uses `.venv/Scripts/python.exe`; change it to `.venv/bin/python` on POSIX.
+
+## Formatting, modules, and CI
+
+`pmd fmt notebook.pmd` normalizes frontmatter, fence attributes, and the final
+newline. `pmd extract notebook.pmd CELL --out src/helper.py` writes a cell to a
+normal source file, while `pmd inline src/helper.py --cell helper` prints a PMD
+fence for it. `pmd agent edit notebook.pmd --cell CELL --from src/helper.py`
+performs the same replacement through the agent transaction path, retaining both
+document-revision and source-digest preconditions.
+
+Declare notebook-wide cache inputs in frontmatter or narrowly on one cell:
+
+```markdown
+```python {#fit inputs=data/derived.csv,config/model.json}
+...
+```
+```
+
+`pmd check notebook.pmd --lint-inputs` remains advisory. For CI, use
+`--strict-inputs`: high-confidence undeclared literal inputs fail the command;
+lower-confidence stale declarations are reported as advisories. `pmd audit-deps
+notebook.pmd` finds local imported source modules and prints candidate
+frontmatter inputs. The rendered HTML also annotates direct local
+`from module import function` provenance.
+
 ## Optional Workbench
 
-Run `python server.py` and open `http://localhost:8765`. The local workbench is
-not installed as part of the Python package.
+Start the local browser workbench with the installed CLI:
+
+```console
+pmd workbench .
+```
+
+Open `http://127.0.0.1:8765`. The workbench lists and edits `.pmd` files in the
+selected directory, supports validation, runs a cell or a full notebook, and
+shows outputs inline. It binds only to loopback by default. Use `--port PORT`
+or `--host HOST` when needed; exposing it beyond your machine is unsafe because
+it can edit and execute notebook code.
 
 ## Publishing to PyPI
 
@@ -222,6 +336,14 @@ PDF and `.ipynb` are optional PMD render targets and are intentionally not
 implemented. The CLI refuses them clearly instead of silently losing content.
 
 ## LLM-ready agent protocol
+
+The project ships an agent skill at
+[`skills/polyglot-pmd/SKILL.md`](skills/polyglot-pmd/SKILL.md). It is also
+included in wheels as `pmd_notebook/skills/polyglot-pmd/SKILL.md`. The skill
+teaches agents to discover the installed version and protocol before acting,
+then use digest-protected semantic edits and scoped verification. Its release
+and capability snapshot are covered by tests, so adding a public agent feature
+requires updating the shipped workflow in the same change.
 
 Discover the machine interface without parsing human help text:
 
@@ -255,10 +377,13 @@ Execution requires an explicit host authorization signal:
 
 ```console
 pmd agent verify example.pmd --request verify.json --allow-execution
+pmd agent inspect example.pmd --include-rendered --allow-execution
+pmd agent run example.pmd --stream --allow-execution
+pmd attest example.pmd --receipt receipt.json
 ```
 
-Every agent command writes exactly one JSON object to stdout. Notebook prose,
-source, streams, and outputs are labeled or treated as untrusted content.
+Non-streaming agent commands write exactly one JSON object to stdout;
+`agent run --stream` writes NDJSON events. Notebook prose, source, streams, and
+outputs are labeled or treated as untrusted content.
 Filesystem and network restrictions are reported as unenforceable by the local
 subprocess runner rather than being presented as sandboxed.
-

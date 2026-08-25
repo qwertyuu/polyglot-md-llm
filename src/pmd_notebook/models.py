@@ -68,6 +68,7 @@ class CellResult:
     cache_key: str | None = None
     started_at: str | None = None
     duration_seconds: float | None = None
+    failure: dict[str, Any] | None = None
 
 
 @dataclass(slots=True)
@@ -75,8 +76,8 @@ class RunResult:
     document: Document
     cells: list[CellResult]
     errors: list[str] = field(default_factory=list)
+    run_id: str | None = None
 
     @property
     def ok(self) -> bool:
         return not self.errors and all(cell.status in {"passed", "cached"} for cell in self.cells)
-

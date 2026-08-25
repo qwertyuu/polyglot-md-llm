@@ -1,0 +1,85 @@
+---
+pmd: "0.1"
+title: "PMD 0.6 feature tour"
+schemas:
+  totals:
+    type: object
+    required: [country, tiles, storage_gb]
+    properties:
+      country: {type: string}
+      tiles: {type: integer}
+      storage_gb: {type: number}
+    additionalProperties: false
+capabilities:
+  network: [tiles.example.test]
+---
+
+# PMD 0.6 feature tour
+
+This notebook is both a program and a reader-facing decision document.
+
+| Feature | Demonstrated by |
+|---|---|
+| Typed output | `produces=totaux:schema#totals` |
+| Reader validation | `test-of=document` |
+| Freshness | `stale-after=30d` |
+| Rich tables | `display.csv()` with row dictionaries |
+
+The following JSON fence is documentation, not an executable cell:
+
+```json
+{"tuiles": {"canada": 1600}}
+```
+
+## Scenario
+
+```python {#scenario independent=true stale-after=30d produces=totaux:schema#totals}
+settings = ctx.get("tuiles", {"canada": 1568})
+tiles = settings["canada"]
+endpoint = "https://tiles.example.test/catalog"
+ctx.totaux = {
+    "country": "Canada",
+    "tiles": tiles,
+    "storage_gb": round(tiles * 0.0045, 2),
+}
+print("metric       value")
+print(f"tiles        {tiles:>5}")
+print(f"storage_gb   {ctx.totaux['storage_gb']:>5.2f}")
+```
+
+## Cross-language consumer
+
+```sql {#sql_summary depends-on=scenario}
+SELECT
+  json_extract(ctx_get('totaux'), '$.country') AS country,
+  json_extract(ctx_get('totaux'), '$.tiles') AS tiles;
+```
+
+## Reader report
+
+```python {#report depends-on=scenario}
+totals = ctx.totaux
+display.markdown(
+    f"**Decision input:** {totals['tiles']} tiles require "
+    f"**{totals['storage_gb']:.2f} GB**.",
+    "decision.md",
+)
+display.csv([
+    {"Metric": "Tiles", "Value": totals["tiles"], "Unit": "count"},
+    {"Metric": "Storage", "Value": totals["storage_gb"], "Unit": "GB"},
+], "metrics.csv")
+```
+
+## Document contract
+
+```python {#document_contract role=test test-of=document}
+assert "|---" not in rendered.text
+assert "Metric\tValue\tUnit" in rendered.text
+assert "Decision input:" in rendered.text
+assert "tiles.example.test" not in rendered.text
+```
+
+## Conclusion
+
+The source remains ordinary Markdown, while execution results are cached and
+rendered outside the document.

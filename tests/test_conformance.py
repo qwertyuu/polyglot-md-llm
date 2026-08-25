@@ -46,7 +46,7 @@ pass
     )
     assert parsed.lookup["second"].dependencies == ["first"]
     assert parsed.lookup["third"].dependencies == []
-    assert graph_lines(parsed)[1] == "probe: first"
+    assert graph_lines(parsed)[1] == "probe: executes after <- first"
 
 
 def test_validation_reports_all_static_errors(tmp_path: Path) -> None:
@@ -337,7 +337,11 @@ ctx.value = Path("input.txt").read_text(encoding="utf-8")
 
 
 def test_document_relative_engine_command(tmp_path: Path) -> None:
-    relative_python = Path(__import__("os").path.relpath(sys.executable, tmp_path)).as_posix()
+    import os
+    import pytest
+    if Path(sys.executable).drive.lower() != tmp_path.drive.lower():
+        pytest.skip("relative executable paths cannot cross Windows drive roots")
+    relative_python = Path(os.path.relpath(sys.executable, tmp_path)).as_posix()
     parsed = document(
         f"""---
 engines:

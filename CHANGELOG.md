@@ -1,5 +1,38 @@
 # Changelog
 
+## 0.6.0 - 2026-08-24
+
+- Fix HTML fidelity: monospace standard streams, GFM tables in narrative and
+  rich Markdown, typed `display.csv`, documentary fences, actionable policy
+  blocks, and narrative replacement evidence.
+- Add reader workflows: text rendering, rendered agent inspection, document
+  tests, reader-oriented HTML flags, measurement freshness, named narrative
+  sections, context overrides/sweeps, and run comparison.
+- Add typed JSON output contracts and `pmd call` for notebook composition.
+- Add declared network/SSH capabilities, interpreter-bound cache identity,
+  SLSA/in-toto provenance statements, NDJSON execution events, and structured
+  failures with cell-relative locations and resolved context.
+- Ship a capability-synchronized `polyglot-pmd` agent skill in source and wheel
+  distributions so installed workflows evolve with public PMD features.
+- Implement proposals 0008 through 0027 from the PMD 0.5.0 field report and
+  subsequent agent-distribution work.
+
+## 0.5.0 - 2026-08-08
+
+- Add a low-boilerplate notebook path: bare executable fences receive generated
+  IDs and execute in normal notebook order.
+- Add project-aware Python helpers (`project_root`, `project_dir`,
+  `output_path`) and `display.figure()`; make `display.image()` idempotent for
+  files already under `PMD_CELL_OUT`.
+- Add `{project_dir}`, project-level `pmd.yaml`, `pmd init`, and the
+  `role=setup` convention for portable project configuration.
+- Add `pmd fmt`, `pmd extract`, `pmd inline`, `pmd audit-deps`, and a
+  digest-protected `pmd agent edit` convenience command.
+- Distinguish execution and `uses` composition edges in CLI and rendered graphs;
+  expose direct imported-module provenance in HTML.
+- Support local cell `inputs=`, strict high-confidence input linting for CI,
+  and lower-noise detection around PMD outputs and source modules.
+
 ## 0.4.1 - 2026-08-08
 
 - Fix a bug in 0.4.0's `--lint-inputs` precision retune: `TOKEN_STRIP_CHARS`
@@ -81,4 +114,3 @@
 
 - Initial PMD 0.1 parser, validator, runner, context bindings, cache, CLI, and
   self-contained HTML renderer.
-

@@ -26,6 +26,27 @@ could become a dated `spec.md` addendum or `agent-spec.md` section if accepted
 | [0004](0004-declared-input-linting.md) | Declared-input linting | Implemented (0.3.0) | [GAP-3](../known-issues.md#gap-3-declared-inputs-is-unchecked) |
 | [0005](0005-scratch-patch-execution.md) | Scratch/patch execution against cached context | Implemented (0.3.0) | [GAP-4](../known-issues.md#gap-4-no-sanctioned-scratch-iteration-loop) |
 | [0006](0006-utf8-safe-cli-output.md) | UTF-8-safe CLI output | Implemented (0.4.0) | [BUG-2](../known-issues.md#bug-2-cli---verbose-echo-of-cell-output-still-crashes-outside-cp1252) |
+| [0007](0007-interactive-workbench.md) | Interactive PMD workbench | Proposed | Human authoring and debugging |
+| [0008](0008-render-fidelity.md) | Render fidelity for preformatted output and Markdown tables | Implemented (0.6.0) | PMD 0.5.0 field report 1.1-1.2 |
+| [0009](0009-typed-csv-display.md) | Explicit `display.csv` input contract | Implemented (0.6.0) | PMD 0.5.0 field report 1.3 |
+| [0010](0010-actionable-policy-blocks.md) | Actionable verification block reasons | Implemented (0.6.0) | PMD 0.5.0 field report 1.4 |
+| [0011](0011-documentary-fences.md) | Documentary language fences | Implemented (0.6.0) | PMD 0.5.0 field report 1.5 |
+| [0012](0012-narrative-replacement-evidence.md) | Narrative replacement evidence | Implemented (0.6.0) | PMD 0.5.0 field report 1.6 |
+| [0013](0013-text-rendering.md) | Reader-visible text rendering | Implemented (0.6.0) | PMD 0.5.0 field report 3.1 |
+| [0014](0014-document-tests.md) | Tests over the rendered document | Implemented (0.6.0) | PMD 0.5.0 field report 3.2 |
+| [0015](0015-reader-render-profile.md) | Reader-oriented HTML render controls | Implemented (0.6.0) | PMD 0.5.0 field report 3.5 |
+| [0016](0016-rendered-agent-inspection.md) | Bounded rendered cell inspection | Implemented (0.6.0) | PMD 0.5.0 field report 3.1 |
+| [0017](0017-stale-measurements.md) | Staleness metadata for measurements | Implemented (0.6.0) | PMD 0.5.0 field report 3.3 |
+| [0018](0018-context-overrides-and-sweeps.md) | Run-scoped context overrides and sweeps | Implemented (0.6.0) | PMD 0.5.0 field report 3.4 |
+| [0019](0019-run-comparison.md) | Compare outputs with a previous run | Implemented (0.6.0) | PMD 0.5.0 field report 3.6 |
+| [0020](0020-named-narrative-sections.md) | Named narrative sections | Implemented (0.6.0) | PMD 0.5.0 field report 3.7 |
+| [0021](0021-typed-output-contracts.md) | Typed context output contracts | Implemented (0.6.0) | PMD 0.5.0 field report 4.1 |
+| [0022](0022-callable-notebooks.md) | Callable notebooks | Implemented (0.6.0) | PMD 0.5.0 field report 4.2 |
+| [0023](0023-declared-capabilities.md) | Declared external capabilities | Implemented (0.6.0) | PMD 0.5.0 field report 4.3 |
+| [0024](0024-provenance-attestations.md) | Interpreter-bound provenance attestations | Implemented (0.6.0) | PMD 0.5.0 field report 4.4 |
+| [0025](0025-streaming-execution-events.md) | Streaming execution events | Implemented (0.6.0) | PMD 0.5.0 field report 4.5 |
+| [0026](0026-structured-failures.md) | Structured execution failures | Implemented (0.6.0) | PMD 0.5.0 field report 4.6 |
+| [0027](0027-shipped-agent-skill.md) | Capability-synchronized agent skill | Implemented (0.6.0) | Agent adoption of new PMD features |
 
 ## How to review one
 

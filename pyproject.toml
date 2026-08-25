@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "polyglot-pmd"
-version = "0.4.1"
+version = "0.6.0"
 description = "LLM-ready, dependency-aware polyglot Markdown notebooks"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,6 +32,9 @@ pmd = "pmd_notebook.cli:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/pmd_notebook"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"skills/polyglot-pmd/SKILL.md" = "pmd_notebook/skills/polyglot-pmd/SKILL.md"
+
 [tool.hatch.build.targets.sdist]
 include = [
   "src/pmd_notebook",
@@ -43,9 +46,9 @@ include = [
   "spec.md",
   "agent-spec.md",
   "example.pmd",
+  "skills/polyglot-pmd/SKILL.md",
 ]
 
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
-
