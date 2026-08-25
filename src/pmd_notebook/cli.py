@@ -34,6 +34,12 @@ class Parser(argparse.ArgumentParser):
         self.exit(3, f"{self.prog}: error: {message}\n")
 
 
+def _default_project_python(platform: str | None = None) -> str:
+    platform = platform or sys.platform
+    executable = ".venv/Scripts/python.exe" if platform == "win32" else ".venv/bin/python"
+    return f"{{project_dir}}/{executable}"
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = Parser(prog="pmd", description="Execute PMD polyglot Markdown notebooks")
     parser.add_argument("--version", action="version", version="%(prog)s 0.6.0")
@@ -283,7 +289,14 @@ def main(argv: list[str] | None = None) -> None:
         if not args.force and (config.exists() or notebook.exists()):
             print("pmd init refuses to overwrite existing pmd.yaml or notebook.pmd; use --force", file=sys.stderr)
             raise SystemExit(3)
-        config.write_text("# Project-level interpreter configuration.\nengines:\n  python:\n    command: \"{project_dir}/.venv/Scripts/python.exe\"\n", encoding="utf-8")
+        project_python = _default_project_python()
+        config.write_text(
+            "# Project-level interpreter configuration.\n"
+            "engines:\n"
+            "  python:\n"
+            f"    command: \"{project_python}\"\n",
+            encoding="utf-8",
+        )
         notebook.write_text("---\ntitle: Untitled PMD notebook\n---\n\n# Untitled PMD notebook\n\n```python\nprint(\"Hello from an isolated PMD cell\")\n```\n", encoding="utf-8")
         print(config)
         print(notebook)

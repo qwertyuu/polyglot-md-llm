@@ -278,8 +278,9 @@ This selects an existing environment; PMD still does not provision packages.
 For portable projects, run `pmd` from the project's virtual environment, or
 commit a project-level `pmd.yaml` with an interpreter command. `pmd init`
 creates both that configuration and a minimal `notebook.pmd`; `{project_dir}`
-in the command expands to the project root. On Windows its initial template
-uses `.venv/Scripts/python.exe`; change it to `.venv/bin/python` on POSIX.
+in the command expands to the project root. Its platform-native template uses
+`.venv/Scripts/python.exe` on Windows and `.venv/bin/python` on macOS/Linux.
+Initialization selects that environment but does not create it.
 
 ## Formatting, modules, and CI
 

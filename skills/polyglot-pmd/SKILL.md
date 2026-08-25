@@ -60,9 +60,11 @@ For an existing notebook:
 5. Reuse the `recommended_verification` request returned by apply unchanged.
 6. Authorize execution only after reviewing the verification plan.
 
-For a new notebook, start with `pmd init`, give stable ids to cells that will be
-referenced, declare dependencies explicitly, add `role=test` cells, then run
-`check`, `run`, `test`, and the intended render target.
+For a new notebook, start with `pmd init`. The generated engine path targets
+`.venv/Scripts/python.exe` on Windows and `.venv/bin/python` on POSIX but does
+not create that environment. Give stable ids to referenced cells, declare
+dependencies explicitly, add `role=test` cells, then run `check`, `run`,
+`test`, and the intended render target.
 
 ## Use Reader and Composition Features
 

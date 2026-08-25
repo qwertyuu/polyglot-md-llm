@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Fix `pmd init` to generate `.venv/bin/python` on POSIX instead of the
+  Windows-only `.venv/Scripts/python.exe` path.
+
 ## 0.6.0 - 2026-08-24
 
 - Fix HTML fidelity: monospace standard streams, GFM tables in narrative and
