@@ -13,4 +13,4 @@ __all__ = [
     "topological_order", "validate",
 ]
 
-__version__ = "0.6.0"
+__version__ = "0.6.1"

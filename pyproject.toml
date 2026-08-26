@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "polyglot-pmd"
-version = "0.6.0"
+version = "0.6.1"
 description = "LLM-ready, dependency-aware polyglot Markdown notebooks"
 readme = "README.md"
 requires-python = ">=3.10"

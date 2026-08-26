@@ -1,6 +1,6 @@
 # Proposal 0029: Preserve cache-key integrity during typed-output validation
 
-**Status:** Implemented (next patch release)
+**Status:** Implemented (0.6.1)
 **Fixes:** `produces=` output names overwrite the computed cache key
 **Touches:** typed output validation, cache storage, verification receipts
 

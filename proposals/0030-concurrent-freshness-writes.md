@@ -1,6 +1,6 @@
 # Proposal 0030: Retry concurrent freshness-registry writes
 
-**Status:** Implemented (next patch release)
+**Status:** Implemented (0.6.1)
 **Fixes:** Concurrent runs can fail while replacing `stale-after` metadata on Windows
 **Touches:** cache persistence and measurement freshness
 

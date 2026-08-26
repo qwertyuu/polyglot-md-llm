@@ -42,7 +42,7 @@ def _default_project_python(platform: str | None = None) -> str:
 
 def _parser() -> argparse.ArgumentParser:
     parser = Parser(prog="pmd", description="Execute PMD polyglot Markdown notebooks")
-    parser.add_argument("--version", action="version", version="%(prog)s 0.6.0")
+    parser.add_argument("--version", action="version", version="%(prog)s 0.6.1")
     commands = parser.add_subparsers(dest="command", required=True, parser_class=Parser)
     check = commands.add_parser("check", help="validate a document without executing it")
     check.add_argument("file")

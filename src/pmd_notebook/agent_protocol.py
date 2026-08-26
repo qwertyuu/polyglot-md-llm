@@ -26,7 +26,7 @@ from .runner import Runner, _engine_identity, _input_fingerprints
 PROTOCOL = "pmd-agent/0.2"
 RECEIPT_VERSION = "pmd-verification/0.1"
 RUNNER_NAME = "polyglot-pmd"
-RUNNER_VERSION = "0.6.0"
+RUNNER_VERSION = "0.6.1"
 DEFAULT_MAX_RESPONSE = 1024 * 1024
 TOKEN_LIFETIME_SECONDS = 24 * 60 * 60
 EXECUTABLE_ROLES = {"code", "setup"}
