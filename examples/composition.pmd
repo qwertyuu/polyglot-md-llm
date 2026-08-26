@@ -1,0 +1,47 @@
+---
+pmd: '0.1'
+title: Declared inputs and library cells
+inputs:
+- data/measurements.csv
+---
+
+
+
+# Declared inputs and library cells
+
+The input fingerprint participates in cache keys. The library cell contributes
+source code to its consumers but never executes as a separate process.
+
+```python {#statistics role=lib}
+import csv
+from pathlib import Path
+
+def read_measurements(path):
+    with Path(path).open(encoding="utf-8", newline="") as stream:
+        return [
+            {"sensor": row["sensor"], "value": float(row["value"])}
+            for row in csv.DictReader(stream)
+        ]
+
+def mean(values):
+    return sum(values) / len(values)
+```
+
+```python {#load independent=true tags=data uses=statistics}
+rows = read_measurements("data/measurements.csv")
+ctx.rows = rows
+ctx.average = mean([row["value"] for row in rows])
+ctx.output_name = "measurements" + ".csv"
+print(f"Loaded {len(rows)} declared measurements")
+```
+
+```python {#report depends-on=load tags=report}
+display.csv(ctx.rows, name=ctx.output_name)
+display.markdown(f"Average measurement: **{ctx.average:.2f}**", "average.md")
+```
+
+```python {#verify-composition role=test test-of=report uses=statistics}
+assert len(ctx.rows) == 4
+assert mean([row["value"] for row in ctx.rows]) == ctx.average
+assert outputs.path("report", ctx.output_name).is_file()
+```

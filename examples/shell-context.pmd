@@ -1,0 +1,26 @@
+---
+pmd: '0.1'
+title: Shell and Python context
+---
+
+
+# Shell and Python context
+
+This POSIX example writes JSON context in `sh` and consumes it from an isolated
+Python process.
+
+```sh {#shell-setup independent=true}
+ctx_set greeting '"hello from sh"'
+ctx_set samples '[2,4,8,16]'
+printf 'Shell prepared %s\n' "$(ctx_get greeting)"
+```
+
+```python {#python-consumer depends-on=shell-setup}
+ctx.total = sum(ctx.samples)
+print(f"{ctx.greeting}: total={ctx.total}")
+```
+
+```python {#verify-shell role=test test-of=python-consumer}
+assert ctx.greeting == "hello from sh"
+assert ctx.total == 30
+```

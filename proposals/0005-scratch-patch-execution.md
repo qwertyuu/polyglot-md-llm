@@ -1,7 +1,7 @@
 # Proposal 0005: Scratch/patch execution against cached context
 
 **Status:** Implemented (0.3.0)
-**Fixes:** [known-issues.md → GAP-4](../known-issues.md#gap-4-no-sanctioned-scratch-iteration-loop)
+**Fixes:** [known-issues.md → GAP-4](../docs/known-issues.md#gap-4-no-sanctioned-scratch-iteration-loop)
 **Touches:** `spec.md` §9.1 (single-cell execution), `cli.py`, `runner.py`
 
 ## Motivation

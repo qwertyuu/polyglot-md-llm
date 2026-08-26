@@ -1,7 +1,7 @@
 # Proposal 0004: Declared-input linting
 
 **Status:** Implemented (0.3.0)
-**Fixes:** [known-issues.md → GAP-3](../known-issues.md#gap-3-declared-inputs-is-unchecked)
+**Fixes:** [known-issues.md → GAP-3](../docs/known-issues.md#gap-3-declared-inputs-is-unchecked)
 **Touches:** `spec.md` §5.5 (caching and staleness), `cli.py` (`check`),
 `runner.py` (`_declared_inputs`)
 

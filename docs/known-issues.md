@@ -1,4 +1,4 @@
-# PMD Implementation — Known Issues & Field Notes
+# PMD Implementation: Known Issues and Field Notes
 
 **Status:** Living document, not part of the spec. Tracks concrete findings from
 running `polyglot-pmd` against a real notebook, as opposed to reading the
@@ -7,7 +7,7 @@ source.
 (re-verification below), 0.4.0 (BUG-2 fix, verified fully effective; GAP-3
 precision retune, verified partially effective), and 0.4.1 (GAP-3 root-cause
 fix, verified both by targeted reproduction and by a full rerun against the
-original reference document — see [CHANGELOG.md](CHANGELOG.md)).
+original reference document — see [CHANGELOG.md](../CHANGELOG.md)).
 
 ## Provenance
 
@@ -39,12 +39,12 @@ new false-positive class the retune itself introduced). See each entry's
 
 | ID | Severity | Area | One-line | Status |
 |---|---|---|---|---|
-| [BUG-1](#bug-1-non-ascii-in-a-code-cell-crashes-with-a-misleading-pep-263-error) | High | engine invocation, Windows | Non-ASCII in a code cell crashes with a misleading PEP 263 error | **Fixed in 0.3.0**, verified — [proposals/0001](proposals/0001-utf8-safe-cell-source.md) |
-| [BUG-2](#bug-2-cli---verbose-echo-of-cell-output-still-crashes-outside-cp1252) | Medium | CLI output, Windows | `pmd run/test --verbose` crashes echoing cell stdout containing characters outside the host codepage (e.g. CJK, emoji) | **Fixed in 0.4.0**, verified — [proposals/0006](proposals/0006-utf8-safe-cli-output.md) |
-| [GAP-1](#gap-1-no-cross-cell-code-sharing) | Medium | ergonomics | No cross-cell code sharing forces literal constant duplication | **Fixed in 0.3.0**, verified — [proposals/0002](proposals/0002-shared-library-cells.md) |
-| [GAP-2](#gap-2-render-silently-excludes-test-cells) | Medium | render | `pmd render` silently excludes `role=test` cells; shipped artifact can't prove its own claims | **Fixed in 0.3.0**, verified — [proposals/0003](proposals/0003-render-with-tests.md) |
-| [GAP-3](#gap-3-declared-inputs-is-unchecked) | Medium | caching | Declared `inputs:` is never checked against what a cell actually reads | **Fixed in 0.3.0**; 0.4.0 retune verified partial (13→10, not claimed 13→1); **0.4.1 root-cause fix verified on the real document (10→4)** — remaining 4 are one known, inherent, low-severity class — [proposals/0004](proposals/0004-declared-input-linting.md) |
-| [GAP-4](#gap-4-no-sanctioned-scratch-iteration-loop) | Low | ergonomics | No sanctioned way to iterate against cached upstream context without permanently editing the document | **Fixed in 0.3.0**, verified — [proposals/0005](proposals/0005-scratch-patch-execution.md) |
+| [BUG-1](#bug-1-non-ascii-in-a-code-cell-crashes-with-a-misleading-pep-263-error) | High | engine invocation, Windows | Non-ASCII in a code cell crashes with a misleading PEP 263 error | **Fixed in 0.3.0**, verified — [proposals/0001](../proposals/0001-utf8-safe-cell-source.md) |
+| [BUG-2](#bug-2-cli---verbose-echo-of-cell-output-still-crashes-outside-cp1252) | Medium | CLI output, Windows | `pmd run/test --verbose` crashes echoing cell stdout containing characters outside the host codepage (e.g. CJK, emoji) | **Fixed in 0.4.0**, verified — [proposals/0006](../proposals/0006-utf8-safe-cli-output.md) |
+| [GAP-1](#gap-1-no-cross-cell-code-sharing) | Medium | ergonomics | No cross-cell code sharing forces literal constant duplication | **Fixed in 0.3.0**, verified — [proposals/0002](../proposals/0002-shared-library-cells.md) |
+| [GAP-2](#gap-2-render-silently-excludes-test-cells) | Medium | render | `pmd render` silently excludes `role=test` cells; shipped artifact can't prove its own claims | **Fixed in 0.3.0**, verified — [proposals/0003](../proposals/0003-render-with-tests.md) |
+| [GAP-3](#gap-3-declared-inputs-is-unchecked) | Medium | caching | Declared `inputs:` is never checked against what a cell actually reads | **Fixed in 0.3.0**; 0.4.0 retune verified partial (13→10, not claimed 13→1); **0.4.1 root-cause fix verified on the real document (10→4)** — remaining 4 are one known, inherent, low-severity class — [proposals/0004](../proposals/0004-declared-input-linting.md) |
+| [GAP-4](#gap-4-no-sanctioned-scratch-iteration-loop) | Low | ergonomics | No sanctioned way to iterate against cached upstream context without permanently editing the document | **Fixed in 0.3.0**, verified — [proposals/0005](../proposals/0005-scratch-patch-execution.md) |
 
 ---
 
@@ -111,7 +111,7 @@ failed dependency: ...`), even though only the prose in `print()` calls was
 at fault — no logic was wrong. Recovery required manually grepping the
 document for `[’‘“”–—]` and hand-editing eight lines across three cells.
 
-**Suggested fix:** see [proposals/0001](proposals/0001-utf8-safe-cell-source.md).
+**Suggested fix:** see [proposals/0001](../proposals/0001-utf8-safe-cell-source.md).
 
 **Workaround (current, pre-0.3.0 only):** keep code-cell source (including
 string literals and comments) strictly ASCII. Narrative Markdown between
@@ -124,7 +124,7 @@ had stripped from eight `print()` calls in `paddy_handoff.pmd` and reran
 actually matters — it's what ships to a reader) decodes as valid UTF-8 with
 every em dash intact (confirmed by decoding the output file and counting
 U+2014 occurrences, not by eyeballing a terminal). The fix in
-`runner.py` matches [proposals/0001](proposals/0001-utf8-safe-cell-source.md)
+`runner.py` matches [proposals/0001](../proposals/0001-utf8-safe-cell-source.md)
 exactly: byte-mode stdin (`input=source.encode("utf-8")`, no `text=True`),
 explicit `.decode("utf-8", errors="replace")` on captured stdout/stderr, and
 `PYTHONUTF8=1` injected into the cell subprocess's environment. This exact
@@ -184,7 +184,7 @@ doesn't trip this bug; this only reproduces via **explicit** `stdout`/`stderr`
 writes of raw non-ASCII content, not via an unhandled exception's own
 message).
 
-**Suggested fix:** see [proposals/0006](proposals/0006-utf8-safe-cli-output.md)
+**Suggested fix:** see [proposals/0006](../proposals/0006-utf8-safe-cli-output.md)
 — apply the same treatment used for the cell subprocess to `pmd.exe`'s own
 process (`PYTHONUTF8=1` / `sys.stdout.reconfigure(...)` at CLI startup).
 
@@ -231,7 +231,7 @@ but the *moment* two cells need to derive something from it in an
 engine-specific way (e.g., "join this against a dataframe"), you're back to
 duplicating the surrounding code, not just the data.
 
-**Proposal:** [proposals/0002](proposals/0002-shared-library-cells.md).
+**Proposal:** [proposals/0002](../proposals/0002-shared-library-cells.md).
 
 **Verified in 0.3.0 (2026-08-08):** refactored `paddy_handoff.pmd` for real —
 pulled the `BOT_SIDE`/`BOT_TIGHTNESS` dicts out of the three cells that
@@ -286,7 +286,7 @@ shipped HTML — a reader of the rendered document has to take the sender's
 word for it that the tests passed, which undermines the reason to make them
 executable assertions in the first place.
 
-**Proposal:** [proposals/0003](proposals/0003-render-with-tests.md).
+**Proposal:** [proposals/0003](../proposals/0003-render-with-tests.md).
 
 **Verified in 0.3.0 (2026-08-08):** `pmd render paddy_handoff.pmd --to html
 --with-tests --fresh` now executes all three `role=test` cells and the
@@ -331,7 +331,7 @@ forgotten file changes underneath it.
 there was no tool feedback confirming the list was complete, only the
 absence of an error.
 
-**Proposal:** [proposals/0004](proposals/0004-declared-input-linting.md).
+**Proposal:** [proposals/0004](../proposals/0004-declared-input-linting.md).
 
 **Verified in 0.3.0 (2026-08-08), with a real precision caveat:** two-part
 check. **Recall (positive control):** temporarily added an undeclared
@@ -343,7 +343,7 @@ correctly-declared `paddy_handoff.pmd` (9/9 real external files already
 covered) and got **13 warnings, all 13 false positives, zero true
 positives.** Reading `lint.py`'s implementation (`_looks_like_path` /
 `PATH_SEP_RE`) explains all of them, in four distinct categories, none of
-which are implementation bugs relative to [proposals/0004](proposals/0004-declared-input-linting.md)'s
+which are implementation bugs relative to [proposals/0004](../proposals/0004-declared-input-linting.md)'s
 own spec — they're the heuristic behaving exactly as specified, on real
 prose, worse than the proposal anticipated:
 1. **`display.image(path, name=...)`'s own `name=` argument** — a bare
@@ -377,7 +377,7 @@ retune (extraction should unescape source text; `display.*` calls' `name=`
 kwarg should probably be excluded from the scan entirely; matching should
 look for a path-shaped *token*, not treat the whole literal as one candidate)
 than a new design decision — a natural v2 of
-[proposals/0004](proposals/0004-declared-input-linting.md) rather than a
+[proposals/0004](../proposals/0004-declared-input-linting.md) rather than a
 distinct proposal.
 
 **Retuned in 0.4.0, claimed 13→1, verified 13→10 — CHANGELOG overstates it.**
@@ -477,7 +477,7 @@ one pre-existing, unrelated cross-drive-letter failure
 class (a purely textual heuristic cannot distinguish "this cell reads that
 path" from "this print statement mentions that path in a citation sentence"
 without deeper intent-tracking than a regex scan can offer) — not filed as a
-new issue, since [proposals/0004](proposals/0004-declared-input-linting.md)'s
+new issue, since [proposals/0004](../proposals/0004-declared-input-linting.md)'s
 own "Open questions" already named exactly this limitation as expected,
 inherent, textual-heuristic behavior rather than a bug to fix.
 
@@ -502,7 +502,7 @@ lands in the source), but it means the fast, iterative part of development
 happens with no relationship to PMD's process-isolation, caching, or context
 model at all — and then has to be manually transcribed back in.
 
-**Proposal:** [proposals/0005](proposals/0005-scratch-patch-execution.md).
+**Proposal:** [proposals/0005](../proposals/0005-scratch-patch-execution.md).
 
 **Verified in 0.3.0 (2026-08-08):** ran `pmd run paddy_handoff.pmd --cell
 bot_roster --patch -` twice with different probe snippets piped over stdin.
@@ -572,4 +572,3 @@ lists problems is as misleading as one that only lists praise:
   added, the same pre-existing unrelated failure) — passing tests and an
   accurate real-world number are different questions, and this is a
   concrete case where they disagreed.
-

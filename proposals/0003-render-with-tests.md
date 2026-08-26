@@ -1,7 +1,7 @@
 # Proposal 0003: `pmd render --with-tests`
 
 **Status:** Implemented (0.3.0)
-**Fixes:** [known-issues.md → GAP-2](../known-issues.md#gap-2-render-silently-excludes-test-cells)
+**Fixes:** [known-issues.md → GAP-2](../docs/known-issues.md#gap-2-render-silently-excludes-test-cells)
 **Touches:** `spec.md` §8 (testing model), §11.2 (required HTML render
 target), `cli.py`, `render.py`
 

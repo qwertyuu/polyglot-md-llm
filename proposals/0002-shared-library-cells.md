@@ -1,7 +1,7 @@
 # Proposal 0002: Shared library cells
 
 **Status:** Implemented (0.3.0)
-**Fixes:** [known-issues.md → GAP-1](../known-issues.md#gap-1-no-cross-cell-code-sharing)
+**Fixes:** [known-issues.md → GAP-1](../docs/known-issues.md#gap-1-no-cross-cell-code-sharing)
 **Touches:** `spec.md` §4.4 (cell attributes), §4.6 (roles), §5.4 (process
 isolation), `parser.py`, `bindings.py`
 

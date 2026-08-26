@@ -1,6 +1,6 @@
-# PMD — Polyglot Markdown Notebook Format
+# PMD: Polyglot Markdown Notebook Format
 
-**Specification — Draft v0.1**
+**Specification: Draft v0.1**
 **Status:** Draft. No reference implementation exists yet. This document is the contract a conforming implementation must satisfy; it does not prescribe implementation language, architecture, or internal storage.
 
 **File extension:** `.pmd`

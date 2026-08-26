@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import shutil
 import sys
 from pathlib import Path
+
+import pytest
 
 from pmd_notebook import Cache, Runner, graph_lines, parse, render_html, validate
 from pmd_notebook.cli import main
@@ -255,6 +258,24 @@ SELECT ctx_set('number', '14');
 ```
 ```python {#python-value}
 assert ctx.number == 14
+```
+""",
+        tmp_path,
+    )
+    result = runner(tmp_path).run(parsed, fresh=True)
+    assert result.ok
+
+
+@pytest.mark.skipif(shutil.which("powershell") is None, reason="Windows PowerShell is unavailable")
+def test_powershell_context_binding_writes_bom_free_json(tmp_path: Path) -> None:
+    parsed = document(
+        """```powershell {#powershell-value}
+Set-CtxValue greeting "hello from PowerShell"
+Set-CtxValue samples @(3, 6, 9, 12)
+```
+```python {#python-value}
+assert ctx.greeting == "hello from PowerShell"
+assert sum(ctx.samples) == 30
 ```
 """,
         tmp_path,

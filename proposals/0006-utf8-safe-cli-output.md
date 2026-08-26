@@ -1,7 +1,7 @@
 # Proposal 0006: UTF-8-safe CLI output
 
 **Status:** Implemented (0.4.0)
-**Fixes:** [known-issues.md → BUG-2](../known-issues.md#bug-2-cli---verbose-echo-of-cell-output-still-crashes-outside-cp1252)
+**Fixes:** [known-issues.md → BUG-2](../docs/known-issues.md#bug-2-cli---verbose-echo-of-cell-output-still-crashes-outside-cp1252)
 **Touches:** `spec.md` §5.4 (process isolation, by analogy), `cli.py`
 (`_print_results`, `main`)
 **Found while verifying:** [proposals/0001](0001-utf8-safe-cell-source.md),
@@ -12,7 +12,7 @@ in 0.3.0
 [Proposal 0001](0001-utf8-safe-cell-source.md) fixed cell *source*
 transmission and cell *output capture* to be unconditionally UTF-8, and it
 shipped correctly in 0.3.0 — verified directly, see
-[known-issues.md's BUG-1 entry](../known-issues.md#bug-1-non-ascii-in-a-code-cell-crashes-with-a-misleading-pep-263-error).
+[known-issues.md's BUG-1 entry](../docs/known-issues.md#bug-1-non-ascii-in-a-code-cell-crashes-with-a-misleading-pep-263-error).
 That fix works by giving the **cell subprocess** an explicit UTF-8 contract:
 byte-mode stdin, explicit UTF-8 decode of captured stdout/stderr, and
 `PYTHONUTF8=1` injected into that subprocess's environment.

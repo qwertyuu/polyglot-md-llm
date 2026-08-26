@@ -1,0 +1,55 @@
+---
+pmd: '0.1'
+title: Artifacts and rich outputs
+---
+
+
+
+# Artifacts and rich outputs
+
+Small values move through `ctx`. Tables, reports, and other files move as
+explicit cell outputs.
+
+```python {#prepare independent=true}
+ctx.records = [
+    {"region": "north", "requests": 120, "latency_ms": 18.4},
+    {"region": "south", "requests": 95, "latency_ms": 22.1},
+    {"region": "west", "requests": 140, "latency_ms": 16.8},
+]
+ctx.total_requests = sum(row["requests"] for row in ctx.records)
+print(f"Prepared {len(ctx.records)} regions")
+```
+
+```python {#publish depends-on=prepare}
+display.csv(ctx.records, "metrics.csv")
+display.markdown(
+    f"## Service summary\n\nTotal requests: **{ctx.total_requests}**.",
+    "summary.md",
+)
+```
+
+```python {#manifest depends-on=publish}
+import json
+
+csv_file = outputs.path("publish", "metrics.csv")
+summary_file = outputs.path("publish", "summary.md")
+manifest = {
+    "files": [csv_file.name, summary_file.name],
+    "csv_bytes": csv_file.stat().st_size,
+    "total_requests": ctx.total_requests,
+}
+output_path("manifest.json").write_text(
+    json.dumps(manifest, indent=2, sort_keys=True),
+    encoding="utf-8",
+)
+```
+
+```python {#verify-artifacts role=test test-of=manifest}
+import json
+
+csv_text = outputs.path("publish", "metrics.csv").read_text(encoding="utf-8")
+manifest = json.loads(outputs.path("manifest", "manifest.json").read_text(encoding="utf-8"))
+assert set(csv_text.splitlines()[0].split(",")) == {"region", "requests", "latency_ms"}
+assert manifest["files"] == ["metrics.csv", "summary.md"]
+assert manifest["total_requests"] == 355
+```
