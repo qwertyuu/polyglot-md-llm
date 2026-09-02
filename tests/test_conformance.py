@@ -71,6 +71,23 @@ pass
     assert "same: test cells require test-of" in errors
 
 
+def test_invalid_cell_header_syntax_is_reported(tmp_path: Path) -> None:
+    parsed = document(
+        """```python id=wrong
+print('must not disappear')
+```
+```python {id=also-wrong}
+print('must not disappear')
+```
+""",
+        tmp_path,
+    )
+    errors = validate(parsed)
+    assert any("malformed cell header" in error for error in errors)
+    assert any("attribute 'id' is not supported; use '#id'" in error for error in errors)
+    assert len(parsed.cells) == 1
+
+
 def test_cycle_is_reported_as_cell_sequence(tmp_path: Path) -> None:
     parsed = document(
         """```python {#a depends-on=b}

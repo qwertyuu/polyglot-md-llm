@@ -12,6 +12,7 @@ from .models import Cell, Document
 ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
 OPEN_FENCE_RE = re.compile(r"^(?P<fence>`{3,})(?P<info>[^`]*)$")
 ATTR_BLOCK_RE = re.compile(r"^(?P<lang>[\w+-]+)\s*(?P<attrs>\{.*\})?\s*$")
+LANG_PREFIX_RE = re.compile(r"^(?P<lang>[\w+-]+)\s+.+$")
 KNOWN_ATTRIBUTES = {
     "role", "depends-on", "independent", "test-of", "timeout", "env",
     "expect-exit-code", "skip", "tags", "uses", "inputs", "stale-after", "produces",
@@ -56,7 +57,10 @@ def _attributes(raw: str) -> tuple[str | None, dict[str, str], list[str]]:
             key, value = token.split("=", 1)
             if key in attrs:
                 errors.append(f"duplicate attribute '{key}'")
-            attrs[key] = value
+            if key == "id":
+                errors.append("attribute 'id' is not supported; use '#id'")
+            else:
+                attrs[key] = value
         else:
             errors.append(f"malformed attribute '{token}' (expected key=value)")
     return cell_id, attrs, errors
@@ -99,7 +103,7 @@ def parse(text: str, path: str | Path | None = None) -> Document:
             cell_id, attrs, attr_errors = _attributes(attr_block) if attr_block else (None, {}, [])
             # A bare executable fence is intentionally a first-class PMD cell.
             # Generated ids make Markdown-plus-Python useful before users need graph syntax.
-            if cell_id is None and not attrs:
+            if cell_id is None:
                 cell_id = f"cell-{len(cells) + 1}"
             if cell_id is not None:
                 prefix = cell_id or f"line {line_index + 1}"
@@ -115,6 +119,10 @@ def parse(text: str, path: str | Path | None = None) -> Document:
                     start=offsets[line_index],
                     end=offsets[end_index] + len(lines[end_index]),
                 ))
+        elif LANG_PREFIX_RE.match(info):
+            diagnostics.append(
+                f"line {line_index + 1}: malformed cell header; use '{{#id ...}}' for cell attributes"
+            )
         line_index = end_index + 1
 
     previous: str | None = None

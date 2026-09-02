@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Report malformed cell fence headers instead of silently ignoring executable
+  cells, with a clear diagnostic for the unsupported `id=` attribute.
+
 ## 0.6.2 - 2026-08-26
 
 ### Fixed
