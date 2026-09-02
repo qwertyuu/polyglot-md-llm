@@ -75,6 +75,25 @@ def _write_outputs(outputs: list[RichOutput], directory: Path) -> None:
         destination.write_bytes(output.data)
 
 
+def _atomic_json_write(destination: Path, value: Any) -> None:
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    temporary = destination.with_name(
+        f".{destination.name}.{os.getpid()}.{time.time_ns()}.tmp"
+    )
+    temporary.write_text(json.dumps(value, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    try:
+        for attempt in range(5):
+            try:
+                temporary.replace(destination)
+                return
+            except PermissionError:
+                if attempt == 4:
+                    raise
+                time.sleep(0.01 * (attempt + 1))
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
 def _declared_inputs(document: Document) -> list[Path]:
     configured = document.frontmatter.get("inputs", [])
     values = [configured] if isinstance(configured, str) else configured
@@ -180,16 +199,11 @@ class Cache:
             "outputs": [{"name": item.name, "kind": item.kind, "data": base64.b64encode(item.data).decode("ascii")} for item in result.outputs],
             "started_at": result.started_at, "duration_seconds": result.duration_seconds,
         }
-        temporary = self.directory / f".{key}.{os.getpid()}.tmp"
-        temporary.write_text(json.dumps(data, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-        temporary.replace(self.directory / f"{key}.json")
+        _atomic_json_write(self.directory / f"{key}.json", data)
         if document is not None and cell is not None:
             freshness = self._freshness_path(document, cell)
-            freshness.parent.mkdir(parents=True, exist_ok=True)
             record = {"cell_id": cell.id, "source_digest": hashlib.sha256(cell.source.encode("utf-8")).hexdigest(), "started_at": result.started_at, "cache_key": key}
-            fresh_temporary = freshness.with_suffix(f".{os.getpid()}.tmp")
-            fresh_temporary.write_text(json.dumps(record, sort_keys=True), encoding="utf-8")
-            fresh_temporary.replace(freshness)
+            _atomic_json_write(freshness, record)
 
     def freshness(self, document: Document, cell: Cell) -> dict[str, Any] | None:
         try:

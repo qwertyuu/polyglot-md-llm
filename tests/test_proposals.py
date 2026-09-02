@@ -571,6 +571,27 @@ def test_check_warns_when_last_matching_measurement_is_stale(monkeypatch, tmp_pa
     assert "measurement is stale" in capsys.readouterr().err
 
 
+def test_freshness_registry_retries_transient_windows_replace_error(monkeypatch, tmp_path: Path) -> None:
+    parsed = document("```python {#measure stale-after=1d}\nprint('value')\n```\n", tmp_path)
+    executor = runner(tmp_path)
+    original_replace = Path.replace
+    attempts = 0
+
+    def flaky_replace(source: Path, target: Path):
+        nonlocal attempts
+        if Path(target).name == "measure.json" and attempts == 0:
+            attempts += 1
+            raise PermissionError("simulated concurrent Windows replacement")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(Path, "replace", flaky_replace)
+    result = executor.run(parsed, fresh=True)
+
+    assert result.ok
+    assert attempts == 1
+    assert executor.cache.freshness(parsed, parsed.lookup["measure"]) is not None
+
+
 # Proposal 0018 -----------------------------------------------------------
 
 def test_run_context_override_is_nested_scoped_and_cache_keyed(tmp_path: Path) -> None:
