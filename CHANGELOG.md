@@ -4,6 +4,8 @@
 
 - Fix `pmd init` to generate `.venv/bin/python` on POSIX instead of the
   Windows-only `.venv/Scripts/python.exe` path.
+- Preserve the SHA-256 cache key when validating typed `produces=` outputs;
+  output names no longer replace the digest stored in results and receipts.
 
 ## 0.6.0 - 2026-08-24
 

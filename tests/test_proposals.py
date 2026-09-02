@@ -796,6 +796,34 @@ def test_cache_key_includes_resolved_engine_identity(monkeypatch, tmp_path: Path
     assert first != second
 
 
+def test_typed_output_contract_preserves_and_reuses_cache_key(tmp_path: Path) -> None:
+    parsed = document(
+        """---
+schemas:
+  value: {type: integer}
+---
+```python {#work produces=result:schema#value}
+ctx.result = 42
+```
+""",
+        tmp_path,
+    )
+    cache = Cache(tmp_path / "cache")
+    executor = Runner(cache)
+
+    first = executor.run(parsed, fresh=True)
+    cache_key = first.cells[0].cache_key
+    assert cache_key is not None
+    assert len(cache_key) == 64
+    assert all(character in "0123456789abcdef" for character in cache_key)
+    assert (cache.directory / f"{cache_key}.json").is_file()
+
+    second = executor.run(parsed)
+    assert second.cells[0].status == "cached"
+    assert second.cells[0].cache_key == cache_key
+    assert second.cells[0].context == {"result": 42}
+
+
 def test_cli_attest_binds_verified_receipt_to_document(tmp_path: Path, capsys) -> None:
     from pmd_notebook.agent_protocol import read_source
 

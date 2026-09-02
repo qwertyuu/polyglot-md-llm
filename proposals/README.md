@@ -48,6 +48,7 @@ could become a dated `spec.md` addendum or `agent-spec.md` section if accepted
 | [0026](0026-structured-failures.md) | Structured execution failures | Implemented (0.6.0) | PMD 0.5.0 field report 4.6 |
 | [0027](0027-shipped-agent-skill.md) | Capability-synchronized agent skill | Implemented (0.6.0) | Agent adoption of new PMD features |
 | [0028](0028-platform-native-init.md) | Platform-native `pmd init` path | Implemented (next patch release) | POSIX initialization failure |
+| [0029](0029-typed-output-cache-key-integrity.md) | Typed-output cache-key integrity | Implemented (next patch release) | Cache and receipt evidence |
 
 ## How to review one
 

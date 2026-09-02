@@ -423,11 +423,11 @@ class Runner:
                     if status == "passed":
                         schemas, _ = schema_definitions(document)
                         contract_errors: list[str] = []
-                        for key, schema_name in produced_contracts(candidate)[0]:
-                            if key not in delta:
-                                contract_errors.append(f"declared ctx output was not produced: {key}")
+                        for output_key, schema_name in produced_contracts(candidate)[0]:
+                            if output_key not in delta:
+                                contract_errors.append(f"declared ctx output was not produced: {output_key}")
                             elif schema_name in schemas:
-                                contract_errors.extend(validate_value(delta[key], schemas[schema_name], f"ctx.{key}"))
+                                contract_errors.extend(validate_value(delta[output_key], schemas[schema_name], f"ctx.{output_key}"))
                         if contract_errors:
                             status = "failed"
                             stderr += "\n".join(f"PMD output contract: {item}" for item in contract_errors) + "\n"
