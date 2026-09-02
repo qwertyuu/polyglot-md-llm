@@ -6,7 +6,7 @@ import sys
 from .models import Cell, Document
 
 
-PYTHON_BINDING = r'''import json as _pmd_json, os as _pmd_os, shutil as _pmd_shutil
+PYTHON_BINDING = r'''import csv as _pmd_csv, io as _pmd_io, json as _pmd_json, os as _pmd_os, shutil as _pmd_shutil
 from pathlib import Path as _PmdPath
 class _PmdContext:
     def __getattr__(self, key):
@@ -43,6 +43,14 @@ class _PmdContext:
         with open(_pmd_os.environ["PMD_CTX_FILE"], "w", encoding="utf-8") as stream:
             _pmd_json.dump(data, stream, ensure_ascii=False, sort_keys=True)
 ctx = _PmdContext()
+class _PmdRendered:
+    @property
+    def text(self):
+        path = _pmd_os.environ.get("PMD_RENDERED_TEXT_FILE")
+        if not path:
+            raise RuntimeError("rendered.text is only available to test-of=document cells")
+        return _PmdPath(path).read_text(encoding="utf-8")
+rendered = _PmdRendered()
 class _PmdDisplay:
     def _path(self, name, suffix):
         name = name or f"output.{suffix}"
@@ -51,14 +59,50 @@ class _PmdDisplay:
         return _PmdPath(_pmd_os.environ["PMD_CELL_OUT"]) / name
     def markdown(self, text, name="output.md"):
         self._path(name, "md").write_text(str(text), encoding="utf-8")
-    def csv(self, text, name="output.csv"):
-        self._path(name, "csv").write_text(str(text), encoding="utf-8")
+    def csv(self, value, name="output.csv"):
+        if isinstance(value, str):
+            text = value
+        elif isinstance(value, list) and all(isinstance(row, dict) for row in value):
+            columns = list(dict.fromkeys(key for row in value for key in row))
+            stream = _pmd_io.StringIO(newline="")
+            writer = _pmd_csv.DictWriter(stream, fieldnames=columns)
+            if columns:
+                writer.writeheader()
+                writer.writerows(value)
+            text = stream.getvalue()
+        else:
+            raise TypeError("display.csv expects CSV text or a list of dictionaries")
+        self._path(name, "csv").write_text(text, encoding="utf-8")
     def image(self, path, name=None):
-        source = _PmdPath(path)
-        _pmd_shutil.copy2(source, _PmdPath(_pmd_os.environ["PMD_CELL_OUT"]) / (name or source.name))
+        source = _PmdPath(path).resolve()
+        root = _PmdPath(_pmd_os.environ["PMD_CELL_OUT"]).resolve()
+        if root != source and root not in source.parents and not source.is_file():
+            raise FileNotFoundError(f"display.image source does not exist: {source}. Files written under PMD_CELL_OUT are collected automatically; do not register them again.")
+        destination = (root / (name or source.name)).resolve()
+        if root != destination and root not in destination.parents:
+            raise ValueError("display.image destination must stay inside PMD_CELL_OUT")
+        if source == destination:
+            return destination
+        _pmd_shutil.copy2(source, destination)
+        return destination
     def file(self, path, name=None):
         self.image(path, name)
+    def figure(self, figure, name="figure.png", **savefig):
+        """Save a Matplotlib figure directly into the collected output directory."""
+        destination = self._path(name, "png")
+        figure.savefig(destination, **savefig)
+        return destination
 display = _PmdDisplay()
+project_root = _PmdPath(_pmd_os.environ["PMD_PROJECT_ROOT"])
+project_dir = project_root
+def output_path(name):
+    """Return a safe, parent-created path below PMD_CELL_OUT."""
+    root = _PmdPath(_pmd_os.environ["PMD_CELL_OUT"]).resolve()
+    destination = (root / name).resolve()
+    if root != destination and root not in destination.parents:
+        raise ValueError("PMD output path must stay inside PMD_CELL_OUT")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    return destination
 class _PmdOutputs:
     def _roots(self):
         return _pmd_json.loads(_pmd_os.environ.get("PMD_DEP_OUTPUTS", "{}"))

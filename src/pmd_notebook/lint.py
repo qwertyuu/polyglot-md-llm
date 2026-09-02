@@ -111,7 +111,7 @@ def lint_inputs(document: Document) -> list[str]:
             continue
         for literal in _candidate_literals(cell.source):
             for token in _path_tokens(literal):
-                if not _looks_like_path(token, extensions, ignore):
+                if not _looks_like_path(token, extensions, ignore) or "PMD_CELL_OUT" in token or token.startswith("src/"):
                     continue
                 resolved = _resolve(token, document_dir)
                 referenced.append(resolved)
@@ -125,3 +125,11 @@ def lint_inputs(document: Document) -> list[str]:
             warnings.append(f"declared input '{entry}' does not appear to be referenced by any cell source")
 
     return warnings
+
+
+def strict_input_findings(document: Document) -> tuple[list[str], list[str]]:
+    """Split reliable literal-read findings from advisory stale declarations."""
+    findings = lint_inputs(document)
+    high = [item for item in findings if "is not covered by" in item]
+    low = [item for item in findings if item not in high]
+    return high, low

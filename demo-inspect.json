@@ -1,0 +1,9 @@
+{
+  "roots": ["report"],
+  "upstream_depth": 1,
+  "downstream_depth": 1,
+  "include_tests": true,
+  "include_source": true,
+  "include_narrative": "adjacent",
+  "max_bytes": 65536
+}

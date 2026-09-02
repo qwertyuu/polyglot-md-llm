@@ -1,0 +1,9 @@
+# Structured failure demo
+
+```python {#seed independent=true}
+ctx.available = 42
+```
+
+```python {#broken depends-on=seed}
+print(ctx.missing)
+```

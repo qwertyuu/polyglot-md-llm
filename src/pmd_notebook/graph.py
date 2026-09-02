@@ -8,7 +8,9 @@ from collections import Counter
 from pathlib import Path
 
 from .models import Cell, Document
-from .parser import ID_RE, KNOWN_ATTRIBUTES
+from .contracts import literal_ctx_reads, produced_contracts, schema_definitions
+from .capabilities import capability_warnings, declared_capabilities
+from .parser import ID_RE, KNOWN_ATTRIBUTES, STALE_AFTER_RE
 
 DEFAULT_ENGINES: dict[str, list[str]] = {
     "python": [sys.executable],
@@ -28,7 +30,8 @@ ENV_KEY_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 def engines(document: Document) -> tuple[dict[str, list[str]], list[str]]:
     result = {key: list(value) for key, value in DEFAULT_ENGINES.items()}
     errors: list[str] = []
-    configured = document.frontmatter.get("engines", {})
+    configured = _project_config(document).get("engines", {})
+    configured = {**configured, **(document.frontmatter.get("engines", {}) or {})} if isinstance(configured, dict) else document.frontmatter.get("engines", {})
     if configured is None:
         configured = {}
     if not isinstance(configured, dict):
@@ -39,7 +42,7 @@ def engines(document: Document) -> tuple[dict[str, list[str]], list[str]]:
             continue
         try:
             document_dir = document.path.resolve().parent if document.path else Path.cwd()
-            command = os.path.expandvars(config["command"]).replace("{document_dir}", str(document_dir))
+            command = os.path.expandvars(config["command"]).replace("{document_dir}", str(document_dir)).replace("{project_dir}", str(project_root(document)))
             tokens = shlex.split(command, posix=sys.platform != "win32")
             if sys.platform == "win32":
                 tokens = [token[1:-1] if len(token) >= 2 and token[0] == token[-1] == '"' else token for token in tokens]
@@ -64,6 +67,22 @@ def validate(document: Document) -> list[str]:
     counts = Counter(cell.id for cell in document.cells)
     ids = set(counts)
     lookup = document.lookup
+    schemas, schema_errors = schema_definitions(document)
+    errors.extend(schema_errors)
+    declared, capability_errors = declared_capabilities(document)
+    errors.extend(capability_errors)
+    errors.extend(capability_warnings(document, declared))
+    producers: dict[str, str] = {}
+    for candidate in document.cells:
+        contracts, contract_errors = produced_contracts(candidate)
+        errors.extend(contract_errors)
+        for key, schema_name in contracts:
+            if schema_name not in schemas:
+                errors.append(f"{candidate.id}: unknown schema '{schema_name}' for produced key '{key}'")
+            if key in producers:
+                errors.append(f"duplicate producer for ctx key '{key}': {producers[key]}, {candidate.id}")
+            else:
+                producers[key] = candidate.id
     for cell_id, count in counts.items():
         if count > 1:
             errors.append(f"duplicate cell id: {cell_id}")
@@ -73,6 +92,8 @@ def validate(document: Document) -> list[str]:
         for key in cell.attrs:
             if key not in KNOWN_ATTRIBUTES:
                 errors.append(f"{cell.id}: unknown attribute '{key}'")
+        if "inputs" in cell.attrs and not all(item.strip() for item in cell.attrs["inputs"].split(",")):
+            errors.append(f"{cell.id}: inputs must be a comma-separated list of paths")
         if cell.language not in available:
             errors.append(f"{cell.id}: no engine for '{cell.language}'")
         if cell.role not in ROLES:
@@ -102,6 +123,9 @@ def validate(document: Document) -> list[str]:
         timeout = cell.attrs.get("timeout")
         if timeout and not DURATION_RE.fullmatch(timeout):
             errors.append(f"{cell.id}: invalid timeout '{timeout}'")
+        stale_after = cell.attrs.get("stale-after")
+        if stale_after and not STALE_AFTER_RE.fullmatch(stale_after):
+            errors.append(f"{cell.id}: invalid stale-after '{stale_after}'")
         if "expect-exit-code" in cell.attrs:
             try:
                 int(cell.attrs["expect-exit-code"])
@@ -114,6 +138,12 @@ def validate(document: Document) -> list[str]:
         for dependency in cell.dependencies:
             if dependency not in ids:
                 errors.append(f"{cell.id}: unresolved reference '{dependency}'")
+        known_dependencies = [dependency for dependency in cell.dependencies if dependency in lookup]
+        ancestors = closure(known_dependencies, document) if known_dependencies else set()
+        for key in sorted(literal_ctx_reads(cell.source)):
+            producer = producers.get(key)
+            if producer is not None and producer not in ancestors:
+                errors.append(f"{cell.id}: ctx key '{key}' is produced by '{producer}' outside its dependency closure")
     default_timeout = document.frontmatter.get("timeout_default", "60s")
     if not isinstance(default_timeout, str) or not DURATION_RE.fullmatch(default_timeout):
         errors.append(f"invalid timeout_default '{default_timeout}'")
@@ -152,7 +182,7 @@ def closure(targets: list[str], document: Document) -> set[str]:
     selected: set[str] = set()
 
     def add(cell_id: str) -> None:
-        if cell_id in selected:
+        if cell_id in selected or cell_id not in lookup:
             return
         selected.add(cell_id)
         for dependency in lookup[cell_id].dependencies:
@@ -184,4 +214,35 @@ def topological_order(selected: set[str], document: Document) -> list[Cell]:
 
 
 def graph_lines(document: Document) -> list[str]:
-    return [f"{cell.id}: {', '.join(cell.dependencies) or '(root)'}" for cell in document.cells]
+    lines = []
+    for cell in document.cells:
+        execution = ", ".join(cell.dependencies) or "(root)"
+        composition = f"; uses => {', '.join(cell.uses)}" if cell.uses else ""
+        lines.append(f"{cell.id}: executes after <- {execution}{composition}")
+    return lines
+
+
+def project_root(document: Document) -> Path:
+    """Use an explicit root, otherwise find the nearest project marker."""
+    document_dir = document.path.resolve().parent if document.path else Path.cwd()
+    configured = document.frontmatter.get("project_root")
+    if isinstance(configured, str) and configured:
+        value = os.path.expandvars(configured).replace("{document_dir}", str(document_dir))
+        root = Path(value)
+        return (document_dir / root).resolve() if not root.is_absolute() else root.resolve()
+    for candidate in (document_dir, *document_dir.parents):
+        if (candidate / "pmd.yaml").exists() or (candidate / "pyproject.toml").exists() or (candidate / ".git").exists():
+            return candidate
+    return document_dir
+
+
+def _project_config(document: Document) -> dict:
+    config = project_root(document) / "pmd.yaml"
+    if not config.exists():
+        return {}
+    try:
+        import yaml
+        value = yaml.safe_load(config.read_text(encoding="utf-8")) or {}
+        return value if isinstance(value, dict) else {}
+    except (OSError, yaml.YAMLError):
+        return {}

@@ -8,6 +8,7 @@ import re
 import secrets
 import tempfile
 import time
+import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -16,15 +17,16 @@ from typing import Any
 import yaml
 
 from .graph import closure, engines, topological_order, validate
+from .capabilities import declared_capabilities
 from .models import Cell, Document, RunResult
 from .parser import ID_RE, KNOWN_ATTRIBUTES, parse
-from .render import render_html
-from .runner import Runner, _input_fingerprints
+from .render import render_cell_text, render_html
+from .runner import Runner, _engine_identity, _input_fingerprints
 
-PROTOCOL = "pmd-agent/0.1"
+PROTOCOL = "pmd-agent/0.2"
 RECEIPT_VERSION = "pmd-verification/0.1"
 RUNNER_NAME = "polyglot-pmd"
-RUNNER_VERSION = "0.4.1"
+RUNNER_VERSION = "0.6.0"
 DEFAULT_MAX_RESPONSE = 1024 * 1024
 TOKEN_LIFETIME_SECONDS = 24 * 60 * 60
 EXECUTABLE_ROLES = {"code", "setup"}
@@ -173,8 +175,10 @@ def _request_limit(request: dict[str, Any], key: str = "max_response_bytes") -> 
 
 def capabilities() -> AgentResult:
     result = {
-        "protocol_versions": [PROTOCOL],
+        "protocol_versions": [PROTOCOL, "pmd-agent/0.1"],
         "profiles": ["reader", "editor", "verifier", "llm-ready"],
+        "commands": ["capabilities", "inspect", "apply", "verify", "run_stream"],
+        "features": ["rendered_inspection", "named_narrative", "structured_failures", "declared_capabilities", "engine_identity"],
         "operations": [
             "replace_cell_source",
             "insert_cell",
@@ -241,28 +245,43 @@ def _walk(roots: list[str], edges: dict[str, list[str]], depth: int) -> set[str]
 
 def _narrative_segments(document: Document) -> list[dict[str, Any]]:
     segments: list[dict[str, Any]] = []
+    slug_counts: dict[str, int] = {}
+
+    def add_interval(start: int, end: int, before_cell: str | None, after_cell: str | None, fallback_id: str) -> None:
+        text = document.source[start:end]
+        headings = list(re.finditer(r"(?m)^#{1,6}[ \t]+(.+?)[ \t]*#*[ \t]*(?:\r?\n|$)", text))
+        prefix_end = headings[0].start() if headings else len(text)
+        if prefix_end:
+            segments.append({
+                "segment_id": fallback_id,
+                "start": start,
+                "end": start + prefix_end,
+                "before_cell": before_cell,
+                "after_cell": after_cell,
+                "text": text[:prefix_end],
+            })
+        for index, heading in enumerate(headings):
+            section_end = headings[index + 1].start() if index + 1 < len(headings) else len(text)
+            normalized = unicodedata.normalize("NFKD", heading.group(1)).encode("ascii", "ignore").decode("ascii").lower()
+            base_slug = re.sub(r"[^a-z0-9]+", "-", normalized).strip("-") or "section"
+            slug_counts[base_slug] = slug_counts.get(base_slug, 0) + 1
+            suffix = "" if slug_counts[base_slug] == 1 else f"-{slug_counts[base_slug]}"
+            segments.append({
+                "segment_id": f"section:{base_slug}{suffix}",
+                "start": start + heading.start(),
+                "end": start + section_end,
+                "before_cell": before_cell,
+                "after_cell": after_cell,
+                "text": text[heading.start():section_end],
+            })
+
     cursor = document.body_start
     previous: str | None = None
     for cell in document.cells:
-        text = document.source[cursor:cell.start]
-        segments.append({
-            "segment_id": f"before:{cell.id}",
-            "start": cursor,
-            "end": cell.start,
-            "before_cell": cell.id,
-            "after_cell": previous,
-            "text": text,
-        })
+        add_interval(cursor, cell.start, cell.id, previous, f"before:{cell.id}")
         cursor = cell.end
         previous = cell.id
-    segments.append({
-        "segment_id": "after:last",
-        "start": cursor,
-        "end": len(document.source),
-        "before_cell": None,
-        "after_cell": previous,
-        "text": document.source[cursor:],
-    })
+    add_interval(cursor, len(document.source), None, previous, "after:last")
     return segments
 
 
@@ -288,7 +307,7 @@ def _media_type(language: str) -> str:
     }.get(language, "text/plain")
 
 
-def inspect_document(path: str | Path, request: dict[str, Any]) -> AgentResult:
+def inspect_document(path: str | Path, request: dict[str, Any], *, allow_execution: bool = False) -> AgentResult:
     source: SourceFile | None = None
     try:
         source = read_source(path)
@@ -316,9 +335,23 @@ def inspect_document(path: str | Path, request: dict[str, Any]) -> AgentResult:
         include_source = request.get("include_source", False)
         if not isinstance(include_source, bool):
             raise ProtocolError("invalid_request", "include_source must be boolean")
+        include_rendered = request.get("include_rendered", False)
+        if not isinstance(include_rendered, bool):
+            raise ProtocolError("invalid_request", "include_rendered must be boolean")
+        if include_rendered and not allow_execution:
+            raise ProtocolError("authorization_required", "rendered inspection requires host execution authorization", exit_code=5)
         narrative_mode = request.get("include_narrative", "none")
         if narrative_mode not in {"none", "adjacent", "all"}:
             raise ProtocolError("invalid_request", "include_narrative must be none, adjacent, or all")
+
+        rendered_results: dict[str, CellResult] = {}
+        if include_rendered:
+            render_targets = [
+                cell.id for cell in document.cells
+                if cell.id in selected and cell.role in {"code", "setup", "test"} and not cell.skipped
+            ]
+            rendered_run = Runner().run(document, targets=render_targets) if render_targets else RunResult(document, [])
+            rendered_results = {item.id: item for item in rendered_run.cells}
 
         cells: list[dict[str, Any]] = []
         for cell in document.cells:
@@ -331,6 +364,7 @@ def inspect_document(path: str | Path, request: dict[str, Any]) -> AgentResult:
             source_data = _content(cell.source, _media_type(cell.language))
             if not include_source:
                 _omit(source_data, "not_requested")
+            rendered_data = _content(render_cell_text(cell, rendered_results.get(cell.id), document), "text/plain") if include_rendered else None
             cells.append({
                 "id": cell.id,
                 "language": cell.language,
@@ -343,6 +377,7 @@ def inspect_document(path: str | Path, request: dict[str, Any]) -> AgentResult:
                 "downstream": list(reverse[cell.id]),
                 "tests": tests,
                 "source": source_data,
+                "rendered": rendered_data,
                 "content_trust": "untrusted",
             })
 
@@ -376,6 +411,7 @@ def inspect_document(path: str | Path, request: dict[str, Any]) -> AgentResult:
                 "title": document.frontmatter.get("title"),
                 "cell_count": len(document.cells),
                 "selected_cell_count": len(cells),
+                "capabilities": declared_capabilities(document)[0],
             },
             "frontmatter": frontmatter_result,
             "cells": cells,
@@ -387,6 +423,8 @@ def inspect_document(path: str | Path, request: dict[str, Any]) -> AgentResult:
         for item in cells:
             if item["source"]["included"]:
                 candidates.append((item["source"]["bytes"], item["source"], f"cell:{item['id']}:source"))
+            if item["rendered"] and item["rendered"]["included"]:
+                candidates.append((item["rendered"]["bytes"], item["rendered"], f"cell:{item['id']}:rendered"))
         for item in narratives:
             candidates.append((item["content"]["bytes"], item["content"], f"narrative:{item['segment_id']}"))
         if frontmatter_result and frontmatter_result["source"]:
@@ -496,11 +534,12 @@ def _operation_error(error: ProtocolError, index: int) -> ProtocolError:
     return ProtocolError(error.code, error.message, exit_code=error.exit_code, details=details)
 
 
-def _apply_operations(source: SourceFile, document: Document, operations: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], set[str], set[str]]:
+def _apply_operations(source: SourceFile, document: Document, operations: list[dict[str, Any]]) -> tuple[str, list[dict[str, Any]], set[str], set[str], list[dict[str, Any]]]:
     text = source.text
     normalized: list[dict[str, Any]] = []
     changed_ids: set[str] = set()
     deleted_ids: set[str] = set()
+    replaced_narrative: list[dict[str, Any]] = []
     for index, operation in enumerate(operations):
         try:
             if not isinstance(operation, dict) or not isinstance(operation.get("op"), str):
@@ -627,6 +666,12 @@ def _apply_operations(source: SourceFile, document: Document, operations: list[d
                     raise ProtocolError("operation_precondition_failed", f"unknown narrative segment: {segment_id}", exit_code=4)
                 if digest(segment["text"]) != _require_string(operation, "expected_digest"):
                     raise ProtocolError("operation_precondition_failed", f"narrative digest mismatch: {segment_id}", exit_code=4)
+                replaced_narrative.append({
+                    "segment_id": segment_id,
+                    "before_cell": segment["before_cell"],
+                    "after_cell": segment["after_cell"],
+                    "text": segment["text"],
+                })
                 markdown = _normalize_newlines(_require_string(operation, "markdown"), source.newline)
                 candidate_text = text[:segment["start"]] + markdown + text[segment["end"]:]
                 if set(parse(candidate_text, source.path).lookup) - set(current.lookup):
@@ -652,7 +697,7 @@ def _apply_operations(source: SourceFile, document: Document, operations: list[d
             normalized.append({"index": index, "op": name, "status": "applied"})
         except ProtocolError as error:
             raise _operation_error(error, index) from error
-    return text, normalized, changed_ids, deleted_ids
+    return text, normalized, changed_ids, deleted_ids, replaced_narrative
 
 
 def _impact_from_changed(document: Document, changed_ids: set[str], *, document_wide: bool = False) -> dict[str, Any]:
@@ -773,7 +818,7 @@ def apply_transaction(path: str | Path, request: dict[str, Any]) -> AgentResult:
             raise ProtocolError("invalid_request", "operations must be a non-empty array")
         if not all(isinstance(item, dict) for item in operations):
             raise ProtocolError("invalid_request", "each operation must be an object")
-        candidate, normalized, changed_ids, deleted_ids = _apply_operations(source, document, operations)
+        candidate, normalized, changed_ids, deleted_ids, replaced_narrative = _apply_operations(source, document, operations)
         candidate_document = parse(candidate, source.path)
         failures = [item for item in validate(candidate_document) if not item.startswith("warning:")]
         if failures:
@@ -786,6 +831,15 @@ def apply_transaction(path: str | Path, request: dict[str, Any]) -> AgentResult:
         if not isinstance(dry_run, bool):
             raise ProtocolError("invalid_request", "dry_run must be boolean")
         diff_content = _bounded_diff(source.text, candidate, source.path.name, source.path.name, max_bytes)
+        narrative_evidence = [
+            {
+                "segment_id": item["segment_id"],
+                "before_cell": item["before_cell"],
+                "after_cell": item["after_cell"],
+                "content": _content(item["text"], "text/markdown"),
+            }
+            for item in replaced_narrative
+        ]
         placeholder_token = None if dry_run else "x" * 43
         recommended = {
             "document_revision": new_revision,
@@ -803,6 +857,7 @@ def apply_transaction(path: str | Path, request: dict[str, Any]) -> AgentResult:
             "operations": normalized,
             "changed_cells": impact["directly_changed"],
             "changed_narrative": [item.get("segment_id") for item in operations if item.get("op") == "replace_narrative"],
+            "replaced_narrative": narrative_evidence,
             "normalizations": [],
             "diff": diff_content,
             "impact": impact,
@@ -812,6 +867,11 @@ def apply_transaction(path: str | Path, request: dict[str, Any]) -> AgentResult:
         prospective = envelope("apply", source, ok=True, result=result, revision=response_revision)
         if len(json_bytes(prospective)) > max_bytes and diff_content["included"]:
             _omit(diff_content, "response_budget")
+        for item in narrative_evidence:
+            if len(json_bytes(prospective)) <= max_bytes:
+                break
+            if item["content"]["included"]:
+                _omit(item["content"], "response_budget")
         if len(json_bytes(prospective)) > max_bytes:
             raise ProtocolError("response_budget_too_small", "mandatory apply metadata exceeds max_response_bytes")
 
@@ -920,11 +980,13 @@ def _plan(document: Document, impact: dict[str, Any], request: dict[str, Any]) -
         "targets": targets,
         "execution_order": order,
         "engines": {cell.id: available[cell.language] for cell in document.cells if cell.id in selected},
+        "engine_identities": {cell.id: _engine_identity(available[cell.language]) for cell in document.cells if cell.id in selected},
         "inputs": [{"path": path.replace("\\", "/"), "digest": f"sha256:{value}"} for path, value in sorted(input_fingerprints.items())],
         "fresh": request.get("fresh", False),
         "render": request.get("render", False),
         "limits": limits,
         "policy": policy,
+        "declared_capabilities": declared_capabilities(document)[0],
         "omissions": [],
     }
     plan["plan_id"] = digest(plan)
@@ -945,6 +1007,15 @@ def _receipt(
 ) -> dict[str, Any]:
     cells: list[dict[str, Any]] = []
     tests: list[dict[str, Any]] = []
+    blocked_result = next((item for item in run.cells if item.status == "blocked"), None) if run else None
+    receipt_reason = None
+    receipt_detail: dict[str, Any] = {}
+    if blocked_result is not None:
+        receipt_reason = blocked_result.stderr or "cell execution was blocked"
+        receipt_detail = {"cell_id": blocked_result.id, "message": receipt_reason}
+    elif omissions:
+        receipt_reason = str(omissions[0].get("reason") or "verification was blocked")
+        receipt_detail = dict(omissions[0])
     if run:
         for result in run.cells:
             cell = run.document.lookup[result.id]
@@ -955,6 +1026,7 @@ def _receipt(
                 "source_digest": digest(cell.source),
                 "dependencies": list(cell.dependencies),
                 "command": result.command,
+                "engine_identity": _engine_identity(result.command),
                 "status": result.status,
                 "cached": result.cached,
                 "cache_key": result.cache_key,
@@ -969,12 +1041,15 @@ def _receipt(
                     for output in result.outputs
                 ],
                 "context": [{"key": key, "digest": digest(value)} for key, value in sorted(result.context.items())],
+                "failure": result.failure,
             }
             (tests if cell.role == "test" else cells).append(evidence)
     receipt = {
         "receipt_version": RECEIPT_VERSION,
         "receipt_id": None,
         "status": status,
+        "reason": receipt_reason if status == "blocked" else None,
+        "detail": receipt_detail if status == "blocked" else {},
         "document_revision": source.revision,
         "plan_id": plan["plan_id"],
         "scope_source": scope_source,
@@ -1071,8 +1146,9 @@ def verify_document(path: str | Path, request: dict[str, Any], *, allow_executio
         output_size = sum(len(cell.stdout.encode()) + len(cell.stderr.encode()) + sum(len(item.data) for item in cell.outputs) for cell in run.cells)
         runtime_limit = plan["limits"].get("max_runtime_seconds")
         over_limit = max_output is not None and output_size > max_output or runtime_limit is not None and time.time() - started > runtime_limit
+        execution_failed = any(cell.status == "failed" for cell in run.cells)
         execution_blocked = any(cell.status == "blocked" for cell in run.cells)
-        status = "blocked" if execution_blocked else "failed" if not run.ok else "incomplete" if incomplete or over_limit else "verified"
+        status = "failed" if execution_failed else "blocked" if execution_blocked else "incomplete" if incomplete or over_limit else "verified"
         omissions = []
         if incomplete:
             omissions.append({"reason": "requested_scope_incomplete"})
@@ -1083,12 +1159,19 @@ def verify_document(path: str | Path, request: dict[str, Any], *, allow_executio
         exit_code = 0
         if status == "blocked":
             blocked_cell = next(cell for cell in run.cells if cell.status == "blocked")
-            errors.append(diagnostic("policy_blocked", "verification was blocked", cell_id=blocked_cell.id))
+            reason = blocked_cell.stderr or "cell execution was blocked"
+            errors.append(diagnostic(
+                "policy_blocked",
+                f"verification was blocked: {reason}",
+                cell_id=blocked_cell.id,
+                details={"reason": reason},
+            ))
             exit_code = 5
         elif status == "failed":
             failing_test = next((cell for cell in run.cells if cell.status == "failed" and document.lookup[cell.id].role == "test"), None)
             code = "test_failed" if failing_test else "cell_failed"
-            errors.append(diagnostic(code, "verification execution failed", cell_id=failing_test.id if failing_test else next((cell.id for cell in run.cells if cell.status == "failed"), None)))
+            failing_cell = failing_test or next((cell for cell in run.cells if cell.status == "failed"), None)
+            errors.append(diagnostic(code, "verification execution failed", cell_id=failing_cell.id if failing_cell else None, details=failing_cell.failure if failing_cell else None))
             exit_code = 1
         elif status == "incomplete":
             errors.append(diagnostic("limit_exceeded" if over_limit else "invalid_request", "verification scope is incomplete"))
@@ -1099,4 +1182,3 @@ def verify_document(path: str | Path, request: dict[str, Any], *, allow_executio
         return AgentResult(response, exit_code, max_bytes)
     except ProtocolError as error:
         return error_result("verify", error, source)
-

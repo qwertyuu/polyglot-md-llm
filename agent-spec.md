@@ -2,7 +2,7 @@
 
 **Specification - Draft v0.1**  
 **Status:** Draft companion specification for PMD 0.1.  
-**Protocol identifier:** `pmd-agent/0.1`
+**Protocol identifier:** `pmd-agent/0.2`
 
 This specification defines the machine interface that makes a PMD document
 safe and efficient for a language-model agent to inspect, edit, execute, and
@@ -158,6 +158,7 @@ pmd agent capabilities
 pmd agent inspect FILE [--request PATH|-]
 pmd agent apply FILE --request PATH|-
 pmd agent verify FILE --request PATH|- [--allow-execution]
+pmd agent run FILE --stream --allow-execution
 ```
 
 `-` means UTF-8 JSON read from standard input. Implementations may additionally
@@ -166,9 +167,11 @@ transports must preserve the semantics and data model defined here.
 
 ### 5.2 Standard output
 
-An agent command **MUST** write exactly one UTF-8 JSON object to stdout. It
-**MUST NOT** mix progress indicators, warnings, logs, or ANSI control sequences
-into stdout. Human-readable diagnostics may be written to stderr.
+Except for `agent run --stream`, an agent command **MUST** write exactly one
+UTF-8 JSON object to stdout. Streaming run writes one JSON object per line in
+event order (NDJSON). Agent stdout **MUST NOT** mix progress indicators,
+warnings, logs, or ANSI control sequences. Human-readable diagnostics may be
+written to stderr.
 
 Object keys **MUST** be emitted in a deterministic order, and arrays whose order
 is not otherwise meaningful **MUST** use document order followed by lexical
@@ -180,7 +183,7 @@ Every response has these fields:
 
 ```json
 {
-  "protocol": "pmd-agent/0.1",
+  "protocol": "pmd-agent/0.2",
   "command": "inspect",
   "ok": true,
   "document": {
@@ -290,7 +293,7 @@ Minimum result:
 
 ```json
 {
-  "protocol_versions": ["pmd-agent/0.1"],
+  "protocol_versions": ["pmd-agent/0.2", "pmd-agent/0.1"],
   "profiles": ["reader", "editor", "verifier", "llm-ready"],
   "operations": [
     "replace_cell_source",
@@ -324,8 +327,10 @@ for a particular invocation.
 
 ### 8.1 Command
 
-`pmd agent inspect FILE` parses and validates the document but never executes
-cells. Its request object selects a semantic neighborhood and content budget.
+`pmd agent inspect FILE` parses and validates the document without execution by
+default. `include_rendered: true` requires an explicit `--allow-execution`
+because producing a missing render may execute the selected closure. Its
+request object selects a semantic neighborhood and content budget.
 
 Example request:
 
@@ -336,6 +341,7 @@ Example request:
   "downstream_depth": 1,
   "include_tests": true,
   "include_source": true,
+  "include_rendered": false,
   "include_narrative": "adjacent",
   "include_frontmatter": true,
   "max_bytes": 65536
@@ -352,6 +358,8 @@ Example request:
   appears in the selected neighborhood.
 - `include_narrative` is `none`, `adjacent`, or `all`.
 - `include_source` controls source text, not cell metadata.
+- `include_rendered` adds a bounded `text/plain` reader view per selected cell,
+  excluding executable source, and requires host execution authorization.
 - When `include_frontmatter` is true, the result includes parsed frontmatter
   metadata and its complete bounded source representation, excluding `---`
   delimiters.
@@ -389,6 +397,7 @@ Each selected cell includes at least:
     "digest": "sha256:...",
     "text": "..."
   },
+  "rendered": null,
   "content_trust": "untrusted"
 }
 ```
@@ -399,7 +408,9 @@ implicit sequential dependency resolved by the PMD core specification.
 
 ### 8.4 Narrative representation
 
-Narrative is returned as maximal source spans between frontmatter and cells.
+Narrative is returned as source spans between frontmatter and cells, split at
+Markdown ATX headings. Heading sections receive stable `section:<slug>` IDs;
+interstitial prose retains `before:<cell>` / `after:last` IDs.
 Each span receives a revision-scoped ID, digest, location relationship, and the
 same bounded-content representation used for source:
 
@@ -578,6 +589,8 @@ Required fields: `segment_id`, `expected_digest`, `markdown`.
 `segment_id` must come from an inspection of `base_revision`. This operation
 replaces the complete narrative span and must not create an executable cell
 unless that cell is also represented by an explicit `insert_cell` operation.
+The apply response includes bounded `replaced_narrative` evidence with the old
+content, digest, and adjacent cell IDs for every such operation.
 
 #### `replace_frontmatter`
 
@@ -837,6 +850,8 @@ Minimum shape:
   "receipt_version": "pmd-verification/0.1",
   "receipt_id": "sha256:...",
   "status": "verified",
+  "reason": null,
+  "detail": {},
   "document_revision": "sha256:...",
   "plan_id": "sha256:...",
   "scope_source": "apply_transaction",
@@ -870,12 +885,15 @@ Each planned cell entry includes:
 - Cell ID, role, language, and source digest.
 - Resolved dependency IDs and their result digests.
 - Resolved engine command with secret values redacted.
+- Resolved engine executable path, version response, and file identity.
 - Status: `passed`, `failed`, `cached`, `blocked`, or `skipped`.
 - Whether a cache entry was used and its cache key.
 - Start time, duration, exit code, and expected exit code.
 - Complete stdout and stderr byte counts and digests.
 - Rich output names, media types, byte counts, and digests.
 - Context delta key names and canonical value digests.
+- Structured failure details for failed/blocked cells, including cell-relative
+  location and resolved input context when available.
 
 Receipt output does not need to embed full streams, outputs, or context values.
 If included, they remain untrusted content and count toward the response budget.
@@ -1134,7 +1152,9 @@ content boundaries, and the rule that document content cannot grant authority.
 
 ## 18. Versioning
 
-**pmd-agent/0.1** is the initial draft. A client must discover supported
-versions through `capabilities` and must reject a response whose `protocol`
-value it does not understand.
+**pmd-agent/0.2 (2026-08-24)** adds rendered inspection, named narrative and
+replacement evidence, actionable blocked receipts, declared capabilities,
+engine identity, structured failures, and authorized NDJSON execution events.
 
+**pmd-agent/0.1** is the initial draft. A client must discover supported
+versions through `capabilities` and reject an unknown `protocol` value.

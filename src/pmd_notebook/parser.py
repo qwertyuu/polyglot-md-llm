@@ -14,8 +14,10 @@ OPEN_FENCE_RE = re.compile(r"^(?P<fence>`{3,})(?P<info>[^`]*)$")
 ATTR_BLOCK_RE = re.compile(r"^(?P<lang>[\w+-]+)\s*(?P<attrs>\{.*\})?\s*$")
 KNOWN_ATTRIBUTES = {
     "role", "depends-on", "independent", "test-of", "timeout", "env",
-    "expect-exit-code", "skip", "tags", "uses",
+    "expect-exit-code", "skip", "tags", "uses", "inputs", "stale-after", "produces",
 }
+DOCUMENTARY_LANGUAGES = {"console", "diff", "json", "log", "text", "toml", "yaml", "yml"}
+STALE_AFTER_RE = re.compile(r"^[1-9]\d*(?:\.\d+)?[smhd]$")
 
 
 def _frontmatter(text: str) -> tuple[dict[str, Any], int, list[str]]:
@@ -88,8 +90,17 @@ def parse(text: str, path: str | Path | None = None) -> Document:
             diagnostics.append(f"line {line_index + 1}: unterminated code fence")
             break
         info_match = ATTR_BLOCK_RE.match(info)
-        if info_match and info_match.group("attrs"):
-            cell_id, attrs, attr_errors = _attributes(info_match.group("attrs"))
+        if info_match:
+            attr_block = info_match.group("attrs")
+            language = info_match.group("lang").lower()
+            if attr_block is None and language in DOCUMENTARY_LANGUAGES:
+                line_index = end_index + 1
+                continue
+            cell_id, attrs, attr_errors = _attributes(attr_block) if attr_block else (None, {}, [])
+            # A bare executable fence is intentionally a first-class PMD cell.
+            # Generated ids make Markdown-plus-Python useful before users need graph syntax.
+            if cell_id is None and not attrs:
+                cell_id = f"cell-{len(cells) + 1}"
             if cell_id is not None:
                 prefix = cell_id or f"line {line_index + 1}"
                 diagnostics.extend(f"{prefix}: {message}" for message in attr_errors)
@@ -97,7 +108,7 @@ def parse(text: str, path: str | Path | None = None) -> Document:
                 source_end = offsets[end_index]
                 cells.append(Cell(
                     id=cell_id,
-                    language=info_match.group("lang").lower(),
+                    language=language,
                     source=text[source_start:source_end].rstrip("\r\n"),
                     attrs=attrs,
                     index=len(cells),
@@ -117,7 +128,11 @@ def parse(text: str, path: str | Path | None = None) -> Document:
             previous = cell.id
         if cell.role == "test" and cell.attrs.get("test-of"):
             target = cell.attrs["test-of"]
-            if target not in cell.dependencies:
+            if target == "document":
+                cell.dependencies = list(dict.fromkeys(
+                    cell.dependencies + [candidate.id for candidate in cells if candidate.role in {"code", "setup"}]
+                ))
+            elif target not in cell.dependencies:
                 cell.dependencies.append(target)
     return Document(text, frontmatter, cells, diagnostics, Path(path) if path else None, body_start)
 
@@ -125,4 +140,3 @@ def parse(text: str, path: str | Path | None = None) -> Document:
 def load(path: str | Path) -> Document:
     source_path = Path(path)
     return parse(source_path.read_text(encoding="utf-8"), source_path)
-

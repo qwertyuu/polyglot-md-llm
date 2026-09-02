@@ -13,7 +13,11 @@ values = ctx.values
 print(f"Generated {len(values)} observations")
 ```
 
-
+```python {#cell-1}
+# New cell
+hello = 5
+print(hello)
+```
 
 ```python {#summarize depends-on=generate}
 values = ctx.values
@@ -23,12 +27,7 @@ print(f"Mean signal: {average:.2f}")
 display.markdown(f"## Result\n\nThe mean signal is **{average:.2f}**.", name="summary")
 ```
 
-
-
 ```python {#verify role=test test-of=summarize}
 assert ctx.average > 0
 print("Average is positive")
 ```
-
-
-

@@ -94,6 +94,10 @@ timeout_default: "60s"
 - `engines` — maps a language identifier (as used in fence info strings) to a launch command. A runner **MUST** provide sensible built-in defaults for common languages (`bash`, `sh`, `python`, `pwsh`/`powershell`, `sql`) and **MAY** let frontmatter override them.
 - `ctx.backend` — implementation-defined hint for how the run context is persisted (§6). Purely advisory; a runner **MAY** ignore it and use its own default.
 - `timeout_default` — default per-cell timeout when a cell doesn't specify its own (§4.5).
+- `schemas` — named JSON Schema mappings referenced by `produces` contracts.
+- `capabilities.network` / `capabilities.ssh` — declarative host lists exposed to
+  orchestrators and checked against literal source references. They describe
+  intent and do not imply enforcement.
 
 If `engines` references a language absent from both the frontmatter and the runner's built-ins, `pmd check` **MUST** fail with an error naming the missing engine (§10.1).
 
@@ -107,11 +111,16 @@ id-shorthand   := "#" cell-id
 key-value      := attr-key "=" attr-value
 attr-key       := "role" | "depends-on" | "independent" | "test-of" | "uses"
                 | "timeout" | "env" | "expect-exit-code" | "skip" | "tags"
+                | "inputs" | "stale-after" | "produces"
 attr-value     := bare-token | quoted-string
 cell-id        := [a-z][a-z0-9_-]{0,63}
 ```
 
-A fenced code block with **no** `#id` attribute is **not** a cell — it is an ordinary, non-executed illustrative code sample, exactly as in plain Markdown. This lets a `.pmd` document show non-executed example snippets without ambiguity.
+A fenced block in a built-in executable language with no attribute block is an
+implicit cell and receives a generated `cell-N` ID. Unannotated `text`,
+`console`, `json`, `yaml`, `yml`, `diff`, `log`, and `toml` fences are narrative
+examples. An explicit `{...}` block opts any named language into cell semantics,
+including missing-engine validation.
 
 Example:
 
@@ -137,6 +146,9 @@ data = json.load(open("data.json"))
 | `expect-exit-code` | `code`, `setup`, `test` | integer | `0` | Exit code treated as success. |
 | `skip` | all | boolean | `false` | Cell is excluded from `run`, `test`, and `render`. |
 | `tags` | all | comma list | none | Free-form labels for filtering (`pmd run --tag X`). |
+| `inputs` | executable cells | comma list of paths | none | Cell-local declared cache inputs. |
+| `stale-after` | executable cells | duration (`30d`, `12h`) | none | Age after which the last matching successful measurement is reported stale. |
+| `produces` | executable cells | comma list of `KEY:schema#NAME` | none | Typed JSON context outputs, resolved against frontmatter `schemas`. |
 
 Unknown attributes **MUST** cause `pmd check` to fail (fail loud, not silently ignore — this is what makes the format safe for an LLM to edit without a human proofreading every change).
 
@@ -166,7 +178,9 @@ Because the attribute block lives inside the fence info string, a Markdown rende
 
 ### 5.1 Cells vs. narrative
 
-Only fenced blocks carrying a `#id` are cells. Everything else — headings, paragraphs, images, plain (unattributed) code samples — is narrative and is copied into the rendered output verbatim but never executed.
+Explicitly attributed fences and bare fences in built-in executable languages
+are cells. Headings, paragraphs, images, unlabelled fences, and unannotated
+documentary-language fences are narrative and are never executed.
 
 ### 5.2 Dependency graph construction
 
@@ -189,7 +203,7 @@ This UTF-8 contract extends one process boundary further: a CLI that echoes a ce
 
 ### 5.5 Caching and staleness *(SHOULD, not MUST)*
 
-A runner **SHOULD** support skipping re-execution of a cell whose result is already known to be valid for the current run. A cache entry for a cell **SHOULD** be keyed by at least: a hash of the cell's own source text, a hash of the resolved run-context values it depends on transitively, and an identifier for the engine/command used to run it. Implementations are free to use a coarser or finer key; this spec does not mandate a storage mechanism. If a cell declares `uses` (§4.4), the cache key **MUST** be computed over the resolved, `uses`-expanded source, not just the cell's own literal text, so that editing a `lib` cell invalidates every cell that composes it.
+A runner **SHOULD** support skipping re-execution of a cell whose result is already known to be valid for the current run. A cache entry for a cell **SHOULD** be keyed by at least: a hash of the cell's own source text, a hash of the resolved run-context values it depends on transitively, and the resolved executable path, version, and file identity of the engine. If a cell declares `uses` (§4.4), the cache key **MUST** cover the resolved, `uses`-expanded source. `stale-after` does not force execution: renderers report measurement age and `check` warns when the matching successful result is older than the threshold.
 
 ### 5.6 No hidden state (MUST)
 
@@ -221,6 +235,15 @@ A binding **MAY** additionally offer a `ctx_has(key)` check and a `ctx_get(key, 
 ### 6.4 Scoping
 
 `ctx` **MUST** be scoped to a single run. A runner **MUST NOT** leak `ctx` values from one invocation of `pmd run`/`test`/`render` into another unless the implementation explicitly documents and opts into persistence across runs (an acceptable extension, but off by default).
+
+### 6.5 Typed outputs
+
+For each `produces=KEY:schema#NAME` declaration, `pmd check` **MUST** resolve the
+named frontmatter schema and reject duplicate producers. A process that exits
+successfully but does not produce the declared key, or produces a value that
+violates the supported schema, **MUST** be reported failed. Static validation
+**MUST** reject a literal read of a declared key when its producer lies outside
+the consumer's dependency closure.
 
 ---
 
@@ -255,7 +278,10 @@ A cell is considered successful if its process exit code equals its `expect-exit
 
 ### 8.1 Test cells
 
-A cell with `role=test` **MUST** declare `test-of=<id>`, referencing exactly one other cell in the same document. `pmd check` **MUST** fail if `test-of` is missing, empty, or refers to a nonexistent id.
+A cell with `role=test` **MUST** declare either `test-of=<id>`, referencing one
+cell in the same document, or the virtual target `test-of=document`. Document
+tests depend on every executable non-test cell; Python document tests receive
+the already-computed reader view as `rendered.text`.
 
 ### 8.2 Scope
 
@@ -313,16 +339,22 @@ Validates: unique cell ids, all `depends-on`/`test-of`/`uses` references resolve
 
 `--lint-inputs` is an opt-in, off-by-default, best-effort static lint (not a hard guarantee — see §5.5): it scans each `code`/`setup`/`test` cell's source for path-shaped *tokens* — not whole string literals — that look like relative filesystem paths (a conservative heuristic based on path separators or a recognized data-file extension, applied per whitespace-delimited token after unescaping common escape sequences, configurable via frontmatter `lint.input_extensions` / `lint.ignore_patterns`) and reports, as warnings only, any such token not covered by a declared frontmatter `inputs:` entry (exact match or declared-directory prefix), plus any declared `inputs:` entry no cell source appears to reference. A `display.*` call's `name=` keyword argument (a destination filename, not an input) is excluded from the scan. `--lint-inputs` findings **MUST NOT** affect `pmd check`'s exit code.
 
-### 10.2 `pmd run [file] [--cell ID] [--fresh] [--tag TAG] [--patch {-|FILE}]`
-Executes the full graph, or a single cell's closure per §9.1. `--patch` (requires `--cell ID`) executes replacement source against `ID`'s resolved upstream context instead of `ID`'s own source, per §9.3.
+### 10.2 `pmd run [file] [--cell ID] [--fresh] [--tag TAG] [--patch {-|FILE}] [--set PATH=JSON] [--sweep PATH=JSON,...] [--compare-with RUN_ID]`
+Executes the full graph, or a single cell's closure per §9.1. `--patch` (requires `--cell ID`) executes replacement source against `ID`'s resolved upstream context instead of `ID`'s own source, per §9.3. `--set` supplies run-scoped nested context without editing the document. `--sweep` performs isolated variants. Completed runs receive IDs; `--compare-with` reports observable per-cell changes.
 
 ### 10.3 `pmd test [file] [--cell ID] [--tag TAG]`
 Per §8.3.
 
-### 10.4 `pmd render [file] --to {html|pdf|ipynb} [--out PATH] [--with-tests]`
-Per §11. `--with-tests` additionally resolves and executes every `role=test` cell's closure in the same run as the `code`/`setup` execution, and reflects each test's actual pass/fail status in the rendered output (§11.2). Without `--with-tests`, `role=test` cells render unexecuted, exactly as before.
+### 10.4 `pmd render [file] --to {html|text|pdf|ipynb} [--out PATH] [--with-tests] [--hide-graph] [--hide-source]`
+Per §11. `--with-tests` additionally resolves and executes every `role=test` cell's closure. Text output is the machine-readable reader view and omits graph/source. HTML may independently omit graph and source for reader-facing delivery.
 
-### 10.5 Exit codes
+### 10.5 `pmd call [file] --input JSON --output KEY`
+
+Executes the production graph with a run-scoped JSON-object input and returns
+only requested keys declared by `produces`. One key returns its value; multiple
+keys return an object. Machine-readable JSON is the only successful stdout.
+
+### 10.6 Exit codes
 
 | Code | Meaning |
 |---|---|
@@ -344,14 +376,20 @@ A render artifact is **self-contained** if it can be opened and fully viewed —
 `pmd render file.pmd --to html` **MUST** produce a single HTML file that:
 
 - Renders narrative Markdown as HTML.
+- Renders GFM pipe tables in narrative and Markdown rich outputs as semantic HTML tables.
 - Shows each cell's source and declared language.
 - Embeds every image output as a data URI.
 - Shows captured stdout/stderr (collapsed by default is acceptable; omitted entirely is not).
+- Uses a monospace font for preformatted standard streams.
 - **MUST NOT** require network access to display the above. Syntax-highlighting CSS/JS **SHOULD** be embedded inline rather than loaded from a CDN; a purely cosmetic remote resource (e.g. a webfont) **MAY** be used only with a graceful fallback when offline.
 
 With `--with-tests` (§10.4), every `role=test` cell **MUST** display its actual `passed`/`failed` status using the same status vocabulary as `code`/`setup` cells, rather than an unexecuted "not-run" status. If any test cell fails, the runner **MUST** still produce the complete HTML file — a failing render is more useful than no render — but **MUST** exit non-zero (§10.5), and **SHOULD** visually distinguish the document from one with no failing tests (e.g. a banner, not just the per-cell status color).
 
 ### 11.3 Optional targets
+
+- **Text** — reader-visible narrative and outputs with tables represented
+  structurally (for example, tab-separated columns), excluding cell graph and
+  executable source.
 
 - **PDF** — same content contract as HTML, paginated.
 - **`.ipynb`** — because a classic Jupyter notebook assumes one kernel per notebook, a polyglot `.pmd` document exported to `.ipynb` **MUST** either (a) pick one dominant language as the notebook kernel and represent other-language cells as shell/magic cells, or (b) refuse the export with a clear error naming the offending cells. Silently dropping a language's cells is not conformant.
@@ -463,4 +501,9 @@ Left to implementers, deliberately not standardized here:
 
 ## 17. Versioning
 
-**v0.1 (this document)** — initial draft. No prior versions.
+**v0.2 (2026-08-24)** — documentary fences, render fidelity/text profiles,
+document tests, freshness, parameterized runs and history, named narrative,
+typed contracts/calls, declared capabilities, provenance, streaming events,
+and structured failures.
+
+**v0.1** — initial draft.

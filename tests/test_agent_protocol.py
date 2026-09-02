@@ -189,6 +189,81 @@ def test_replace_narrative_cannot_smuggle_an_executable_cell(monkeypatch, tmp_pa
     assert path.read_bytes() == source.raw
 
 
+def test_apply_returns_replaced_narrative_scope_and_content(monkeypatch, tmp_path: Path) -> None:
+    configure_state(monkeypatch, tmp_path)
+    path = notebook(tmp_path)
+    source = read_source(path)
+    inspected = inspect_document(path, {"roots": ["compute"], "include_narrative": "adjacent"})
+    narrative = next(
+        item for item in inspected.response["result"]["narrative"]
+        if item["segment_id"] == "before:compute"
+    )
+    previous = narrative["content"]["text"]
+    outcome = apply_transaction(path, {
+        "base_revision": source.revision,
+        "dry_run": True,
+        "operations": [{
+            "op": "replace_narrative",
+            "segment_id": narrative["segment_id"],
+            "expected_digest": narrative["digest"],
+            "markdown": "Replacement prose.\n\n",
+        }],
+    })
+    assert outcome.response["ok"]
+    evidence = outcome.response["result"]["replaced_narrative"][0]
+    assert evidence["segment_id"] == "before:compute"
+    assert evidence["before_cell"] == "compute"
+    assert evidence["after_cell"] == "seed"
+    assert evidence["content"]["included"] is True
+    assert evidence["content"]["text"] == previous
+    assert evidence["content"]["digest"] == narrative["digest"]
+
+
+def test_named_narrative_section_replacement_preserves_neighboring_prose(monkeypatch, tmp_path: Path) -> None:
+    configure_state(monkeypatch, tmp_path)
+    path = tmp_path / "sections.pmd"
+    path.write_text(
+        """```python {#measure}
+pass
+```
+
+Conclusion from the previous section.
+
+## Request
+
+Old request text.
+
+```python {#answer}
+pass
+```
+""",
+        encoding="utf-8",
+    )
+    inspected = inspect_document(path, {"roots": ["answer"], "include_narrative": "adjacent"})
+    sections = {item["segment_id"]: item for item in inspected.response["result"]["narrative"]}
+    assert "before:answer" in sections
+    assert "section:request" in sections
+    assert "Conclusion from the previous section." in sections["before:answer"]["content"]["text"]
+    assert "Conclusion" not in sections["section:request"]["content"]["text"]
+
+    source = read_source(path)
+    request = sections["section:request"]
+    outcome = apply_transaction(path, {
+        "base_revision": source.revision,
+        "operations": [{
+            "op": "replace_narrative",
+            "segment_id": "section:request",
+            "expected_digest": request["digest"],
+            "markdown": "## Request\n\nNew request text.\n\n",
+        }],
+    })
+    assert outcome.response["ok"]
+    updated = path.read_text(encoding="utf-8")
+    assert "Conclusion from the previous section." in updated
+    assert "New request text." in updated
+    assert "Old request text." not in updated
+
+
 def test_apply_dry_run_returns_candidate_without_writing(monkeypatch, tmp_path: Path) -> None:
     configure_state(monkeypatch, tmp_path)
     path = notebook(tmp_path)
@@ -249,6 +324,37 @@ def test_verify_requires_authorization(monkeypatch, tmp_path: Path) -> None:
     assert outcome.response["result"]["receipt"]["status"] == "blocked"
 
 
+def test_rendered_inspection_requires_execution_authorization(monkeypatch, tmp_path: Path) -> None:
+    configure_state(monkeypatch, tmp_path)
+    path = notebook(tmp_path)
+    outcome = inspect_document(path, {"roots": ["compute"], "include_rendered": True})
+    assert outcome.exit_code == 5
+    assert outcome.response["errors"][0]["code"] == "authorization_required"
+
+
+def test_rendered_inspection_returns_bounded_reader_output(monkeypatch, tmp_path: Path) -> None:
+    configure_state(monkeypatch, tmp_path)
+    path = tmp_path / "rendered.pmd"
+    path.write_text(
+        """```python {#table}
+display.markdown("| a | b |\\n|---|---:|\\n| x | 1 |\\n")
+```
+""",
+        encoding="utf-8",
+    )
+    outcome = inspect_document(
+        path,
+        {"roots": ["table"], "include_rendered": True, "max_bytes": 65536},
+        allow_execution=True,
+    )
+    assert outcome.response["ok"]
+    cell = outcome.response["result"]["cells"][0]
+    assert cell["rendered"]["included"] is True
+    assert "a\tb" in cell["rendered"]["text"]
+    assert "|---" not in cell["rendered"]["text"]
+    assert "display.markdown" not in cell["rendered"]["text"]
+
+
 def test_apply_then_verify_runs_only_affected_graph(monkeypatch, tmp_path: Path) -> None:
     configure_state(monkeypatch, tmp_path)
     path = notebook(tmp_path)
@@ -302,6 +408,30 @@ print("work")
     assert outcome.response["result"]["receipt"]["status"] == "blocked"
 
 
+def test_verify_preserves_actionable_cell_block_reason(monkeypatch, tmp_path: Path) -> None:
+    configure_state(monkeypatch, tmp_path)
+    path = tmp_path / "blocked.pmd"
+    path.write_text(
+        """```python {#work skip=true}
+print("work")
+```
+""",
+        encoding="utf-8",
+    )
+    outcome = verify_document(path, {
+        "document_revision": read_source(path).revision,
+        "changed_cells": ["work"],
+    }, allow_execution=True)
+    assert outcome.exit_code == 5
+    error = outcome.response["errors"][0]
+    receipt = outcome.response["result"]["receipt"]
+    assert error["code"] == "policy_blocked"
+    assert error["details"] == {"reason": "cell is skipped"}
+    assert "cell is skipped" in error["message"]
+    assert receipt["reason"] == "cell is skipped"
+    assert receipt["detail"] == {"cell_id": "work", "message": "cell is skipped"}
+
+
 def test_verify_reports_test_failure(monkeypatch, tmp_path: Path) -> None:
     configure_state(monkeypatch, tmp_path)
     path = notebook(tmp_path)
@@ -329,6 +459,31 @@ def test_verify_reports_test_failure(monkeypatch, tmp_path: Path) -> None:
     assert failed.response["result"]["receipt"]["status"] == "failed"
 
 
+def test_verify_reports_root_failure_instead_of_blocked_downstream(monkeypatch, tmp_path: Path) -> None:
+    configure_state(monkeypatch, tmp_path)
+    path = tmp_path / "root-failure.pmd"
+    path.write_text(
+        """```python {#root}
+raise ValueError("root cause")
+```
+```python {#downstream}
+print("never")
+```
+""",
+        encoding="utf-8",
+    )
+    outcome = verify_document(path, {
+        "document_revision": read_source(path).revision,
+        "changed_cells": ["root"],
+        "include_downstream": True,
+        "fresh": True,
+    }, allow_execution=True)
+    assert outcome.exit_code == 1
+    assert outcome.response["errors"][0]["code"] == "cell_failed"
+    assert outcome.response["errors"][0]["details"]["exception_type"] == "ValueError"
+    assert outcome.response["result"]["receipt"]["status"] == "failed"
+
+
 def test_agent_cli_writes_one_json_document(capsys) -> None:
     try:
         main(["agent", "capabilities"])
@@ -337,4 +492,3 @@ def test_agent_cli_writes_one_json_document(capsys) -> None:
     captured = capsys.readouterr()
     assert captured.err == ""
     assert json.loads(captured.out)["command"] == "capabilities"
-
