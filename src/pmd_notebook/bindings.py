@@ -154,7 +154,9 @@ function Set-CtxValue([string]$Key, $Value) {
   $property = $data.PSObject.Properties[$Key]
   if ($null -eq $property) { $data | Add-Member -NotePropertyName $Key -NotePropertyValue $Value }
   else { $property.Value = $Value }
-  $data | ConvertTo-Json -Depth 100 -Compress | Set-Content -LiteralPath $env:PMD_CTX_FILE -Encoding utf8
+  $json = $data | ConvertTo-Json -Depth 100 -Compress
+  $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+  [System.IO.File]::WriteAllText($env:PMD_CTX_FILE, $json, $utf8NoBom)
 }
 '''
 

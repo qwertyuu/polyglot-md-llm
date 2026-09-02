@@ -4,17 +4,27 @@ build-backend = "hatchling.build"
 
 [project]
 name = "polyglot-pmd"
-version = "0.6.1"
+version = "0.6.2"
 description = "LLM-ready, dependency-aware polyglot Markdown notebooks"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
 authors = [{ name = "PMD contributors" }]
+keywords = ["notebook", "markdown", "polyglot", "reproducibility", "llm"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
   "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Topic :: Scientific/Engineering",
   "Topic :: Text Processing :: Markup",
 ]
 dependencies = [
@@ -22,6 +32,13 @@ dependencies = [
   "Pygments>=2.17,<3",
   "PyYAML>=6.0,<7",
 ]
+
+[project.urls]
+Homepage = "https://github.com/qwertyuu/polyglot-md-llm"
+Documentation = "https://github.com/qwertyuu/polyglot-md-llm#readme"
+Changelog = "https://github.com/qwertyuu/polyglot-md-llm/blob/main/CHANGELOG.md"
+Issues = "https://github.com/qwertyuu/polyglot-md-llm/issues"
+Source = "https://github.com/qwertyuu/polyglot-md-llm"
 
 [project.optional-dependencies]
 dev = ["build>=1.2", "pytest>=8", "twine>=5"]
@@ -42,10 +59,13 @@ include = [
   "LICENSE",
   "README.md",
   "CHANGELOG.md",
+  "CODE_OF_CONDUCT.md",
+  "CONTRIBUTING.md",
+  "SECURITY.md",
   "pyproject.toml",
-  "spec.md",
-  "agent-spec.md",
-  "example.pmd",
+  "docs",
+  "examples",
+  "proposals",
   "skills/polyglot-pmd/SKILL.md",
 ]
 

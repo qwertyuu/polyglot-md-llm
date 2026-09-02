@@ -1,23 +1,73 @@
 # Polyglot PMD
 
-`polyglot-pmd` is a reusable Python implementation of the PMD 0.1 polyglot
-Markdown notebook specification in [`spec.md`](spec.md). It parses and validates
-plain-text `.pmd` documents, resolves their dependency graph, runs every cell in
-an isolated process, and renders a self-contained HTML report.
+[![CI](https://github.com/qwertyuu/polyglot-md-llm/actions/workflows/ci.yml/badge.svg)](https://github.com/qwertyuu/polyglot-md-llm/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/polyglot-pmd)](https://pypi.org/project/polyglot-pmd/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB)](https://www.python.org/)
+[![MIT license](https://img.shields.io/badge/license-MIT-2f855a)](https://github.com/qwertyuu/polyglot-md-llm/blob/main/LICENSE)
 
-[`agent-spec.md`](agent-spec.md) is a draft companion protocol for LLM-ready
+Plain-text notebooks that stay valid Markdown.
+
+`polyglot-pmd` parses and validates `.pmd` documents, resolves their dependency
+graph, runs each cell in an isolated process, and renders a self-contained HTML
+report. A notebook can mix Python, shell, PowerShell, and SQL without hiding its
+execution model inside a binary file format.
+
+## Quickstart
+
+Python 3.10 or newer is required. From a clone:
+
+```console
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -e ".[dev]"
+
+pmd check examples/basic.pmd --graph
+pmd run examples/basic.pmd --fresh --verbose
+pmd test examples/basic.pmd --fresh
+pmd render examples/basic.pmd --to html --out example.html
+```
+
+Open `example.html` to see the source, dependency graph, captured streams, and
+rich outputs in one portable report. To create a standalone project instead:
+
+```console
+mkdir my-analysis
+cd my-analysis
+python -m venv .venv
+# activate .venv for your shell, then:
+python -m pip install polyglot-pmd
+pmd init .
+pmd workbench .
+```
+
+> PMD cells execute arbitrary code with the privileges of the user running
+> `pmd`. Review a document before running, testing, or rendering it.
+
+## Why PMD
+
+- **Readable diffs:** notebooks are ordinary Markdown with fenced code cells.
+- **Explicit dataflow:** ordering, JSON context, files, and shared source use
+  separate mechanisms rather than hidden process state.
+- **Polyglot execution:** built-in engines cover Python, shell, PowerShell, and
+  in-memory SQLite.
+- **Reproducible runs:** dependency-aware caching includes source, interpreters,
+  context, and declared input files.
+- **Agent-safe editing primitives:** bounded inspection, digest-protected edits,
+  explicit execution authorization, and verification receipts are built in.
+
+The PMD 0.1 format is specified in [`docs/spec.md`](https://github.com/qwertyuu/polyglot-md-llm/blob/main/docs/spec.md).
+
+[`docs/agent-protocol.md`](https://github.com/qwertyuu/polyglot-md-llm/blob/main/docs/agent-protocol.md) is a draft companion protocol for LLM-ready
 notebooks. It specifies bounded semantic inspection, atomic cell-level edits,
 impact analysis, execution authorization, and machine-verifiable receipts. The
 `pmd agent` command implements that protocol.
 
-[`known-issues.md`](known-issues.md) tracks concrete bugs and friction found
+[`docs/known-issues.md`](https://github.com/qwertyuu/polyglot-md-llm/blob/main/docs/known-issues.md) tracks concrete bugs and friction found
 by actually building a notebook with this implementation, not by reading the
-source — start there before trusting a claim in this README against an edge
-case. [`proposals/`](proposals/) holds focused, spec-style design proposals
-that address each item in `known-issues.md`.
-
-> PMD cells execute arbitrary code with the privileges of the user running
-> `pmd`. Review a document before running, testing, or rendering it.
+source. Start there before trusting a claim in this README against an edge
+case. [`proposals/`](https://github.com/qwertyuu/polyglot-md-llm/tree/main/proposals/) holds focused, spec-style design proposals
+that address each item in `docs/known-issues.md`.
 
 ## Five-minute mental model
 
@@ -71,21 +121,21 @@ Use `display.figure(fig, "plot.png")` to save and register a Matplotlib figure
 in one call. Any file already written under `PMD_CELL_OUT` is collected
 automatically, so it does not need a `display.image()` call.
 
-## Install
+## Installation
 
 From this checkout:
 
 ```console
-python -m pip install -e ./pmd-impl
-pmd check pmd-impl/example.pmd --graph
-pmd run pmd-impl/example.pmd --fresh
-pmd run pmd-impl/example.pmd --verbose --out-dir pmd-outputs
-pmd test pmd-impl/example.pmd
-pmd render pmd-impl/example.pmd --to html
-pmd render pmd-impl/example.pmd --to text
+python -m pip install -e ".[dev]"
+pmd check examples/basic.pmd --graph
+pmd run examples/basic.pmd --fresh
+pmd run examples/basic.pmd --verbose --out-dir pmd-outputs
+pmd test examples/basic.pmd
+pmd render examples/basic.pmd --to html
+pmd render examples/basic.pmd --to text
 ```
 
-Once published:
+From PyPI:
 
 ```console
 python -m pip install polyglot-pmd
@@ -93,6 +143,10 @@ python -m pip install polyglot-pmd
 
 Python 3.10 or newer is required. The package depends only on PyYAML and
 markdown-it-py. Language interpreters used by a document must also be installed.
+
+More complete walkthroughs live in [`examples/`](https://github.com/qwertyuu/polyglot-md-llm/tree/main/examples/). The
+[`examples/v0.6/`](https://github.com/qwertyuu/polyglot-md-llm/tree/main/examples/v0.6/) feature tour covers typed outputs, sweeps,
+document tests, agent failures, verification receipts, and attestations.
 
 ## Document and composition workflows
 
@@ -192,7 +246,7 @@ lint:
 `ID`'s upstream dependency closure exactly like `pmd run --cell ID`, then
 executes the patch source instead of `ID`'s own source, with `ID`'s
 attributes and resolved upstream `ctx`. The patch run is never cached and
-never written back to the document — it's for probing a candidate snippet
+never written back to the document. It is for probing a candidate snippet
 against real, already-resolved context without touching the source file.
 
 ## Context Bindings
@@ -336,10 +390,17 @@ python -m twine upload dist/*
 PDF and `.ipynb` are optional PMD render targets and are intentionally not
 implemented. The CLI refuses them clearly instead of silently losing content.
 
+## Contributing
+
+Bug reports, focused proposals, documentation improvements, and pull requests
+are welcome. Start with [`CONTRIBUTING.md`](https://github.com/qwertyuu/polyglot-md-llm/blob/main/CONTRIBUTING.md), review the
+[`SECURITY.md`](https://github.com/qwertyuu/polyglot-md-llm/blob/main/SECURITY.md) policy for vulnerabilities, and see
+[`proposals/`](https://github.com/qwertyuu/polyglot-md-llm/tree/main/proposals/) for the project's design process.
+
 ## LLM-ready agent protocol
 
 The project ships an agent skill at
-[`skills/polyglot-pmd/SKILL.md`](skills/polyglot-pmd/SKILL.md). It is also
+[`skills/polyglot-pmd/SKILL.md`](https://github.com/qwertyuu/polyglot-md-llm/blob/main/skills/polyglot-pmd/SKILL.md). It is also
 included in wheels as `pmd_notebook/skills/polyglot-pmd/SKILL.md`. The skill
 teaches agents to discover the installed version and protocol before acting,
 then use digest-protected semantic edits and scoped verification. Its release
@@ -357,30 +418,30 @@ adjacent narrative:
 
 ```console
 echo '{"roots":["summarize"],"upstream_depth":1,"downstream_depth":1,"include_tests":true,"include_source":true,"include_narrative":"adjacent"}' |
-  pmd agent inspect example.pmd --request -
+  pmd agent inspect examples/basic.pmd --request -
 ```
 
 Apply edits using the exact document and cell-source digests returned by
 inspection. Transactions are validated and written atomically:
 
 ```console
-pmd agent apply example.pmd --request change.json
+pmd agent apply examples/basic.pmd --request change.json
 ```
 
 The apply response contains an opaque `change_token` and a
 `recommended_verification` request. Planning never executes code:
 
 ```console
-pmd agent verify example.pmd --request verify.json
+pmd agent verify examples/basic.pmd --request verify.json
 ```
 
 Execution requires an explicit host authorization signal:
 
 ```console
-pmd agent verify example.pmd --request verify.json --allow-execution
-pmd agent inspect example.pmd --include-rendered --allow-execution
-pmd agent run example.pmd --stream --allow-execution
-pmd attest example.pmd --receipt receipt.json
+pmd agent verify examples/basic.pmd --request verify.json --allow-execution
+pmd agent inspect examples/basic.pmd --include-rendered --allow-execution
+pmd agent run examples/basic.pmd --stream --allow-execution
+pmd attest examples/basic.pmd --receipt receipt.json
 ```
 
 Non-streaming agent commands write exactly one JSON object to stdout;

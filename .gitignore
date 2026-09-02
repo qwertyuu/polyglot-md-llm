@@ -21,6 +21,8 @@ env/
 # PMD outputs & cache
 pmd-outputs/
 .cache/
+/example.html
+/examples/v0.6/receipt.json
 
 # IDE & System
 .vscode/

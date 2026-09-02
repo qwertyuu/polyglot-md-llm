@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.6.2 - 2026-08-26
+
+### Fixed
+
+- Write PowerShell context updates as BOM-free UTF-8 so Windows PowerShell 5
+  output remains valid JSON for downstream cells.
+
+### Examples
+
+- Add executable examples for rich artifacts, declared inputs, library-cell
+  composition, POSIX shell context, and PowerShell context.
+- Run portable examples on every CI platform and shell-specific examples on
+  their matching operating systems.
+
+### Repository
+
+- Reorganized executable samples under `examples/` and technical references
+  under `docs/`, with indexes and corrected links throughout the project.
+- Added CI, contribution, security, conduct, issue, and pull-request templates
+  for public collaboration.
+- Removed the obsolete root-level workbench prototype in favor of the packaged
+  implementation under `src/pmd_notebook/workbench/`.
+- Made README links portable between GitHub and the rendered PyPI project page.
+
 ## 0.6.1 - 2026-08-25
 
 - Fix `pmd init` to generate `.venv/bin/python` on POSIX instead of the
@@ -51,7 +75,7 @@
   flagged as a path. Root cause was one shared bug behind two symptoms:
   0.4.0's retune missed the `{var}/N`-suffix shape of numeric fractions, and
   introduced a new false positive on f-string floor division. See
-  `known-issues.md` GAP-3 for the corrected verification notes — 0.4.0's own
+  `docs/known-issues.md` GAP-3 for the corrected verification notes — 0.4.0's own
   CHANGELOG entry claimed "13 → 1" false positives on the reference
   notebook; a rerun found "13 → 10", not 1. This entry's fix is verified
   against targeted reproductions of both symptom shapes, not (yet) a rerun
@@ -70,7 +94,7 @@
   destination-filename argument from the scan, and match path-shaped tokens
   within a literal instead of treating the whole literal as one candidate.
   Cut false positives from 13 to 1 on the notebook used to validate
-  proposal 0004 (see `known-issues.md` GAP-3).
+  proposal 0004 (see `docs/known-issues.md` GAP-3).
 
 ## 0.3.0 - 2026-08-08
 

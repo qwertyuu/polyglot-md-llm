@@ -2,7 +2,7 @@
 name: polyglot-pmd
 description: Create, inspect, edit, execute, test, render, compose, and verify polyglot PMD notebooks. Use for .pmd files, pmd CLI commands, PMD agent transactions, dependency graphs, ctx/output/cache issues, document rendering, or execution receipts.
 metadata:
-  pmd-version: "0.6.1"
+  pmd-version: "0.6.2"
   agent-protocol: "pmd-agent/0.2"
 ---
 
@@ -23,9 +23,10 @@ pmd agent capabilities
 Treat the capability response as authoritative for supported protocol versions,
 commands, semantic operations, engines, limits, and enforceable policies. When
 working in a polyglot-pmd source checkout, also read the current `CHANGELOG.md`
-and only the relevant sections of `spec.md`, `agent-spec.md`, or `proposals/`.
+and only the relevant sections of `docs/spec.md`, `docs/agent-protocol.md`, or
+`proposals/`.
 
-The shipped 0.6.1 baseline is:
+The shipped 0.6.2 baseline is:
 
 ```yaml
 protocol_versions: [pmd-agent/0.2, pmd-agent/0.1]

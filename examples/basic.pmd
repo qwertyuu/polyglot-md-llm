@@ -5,7 +5,7 @@ timeout_default: "30s"
 ---
 # Signal analysis
 
-A minimal polyglot notebook. Each cell is isolated; data crosses boundaries through ctx.
+A minimal PMD notebook. Each cell runs in an isolated process; JSON values cross cell boundaries through `ctx`.
 
 ```python {#generate independent=true tags=demo}
 ctx.values = [3, 8, 13, 21, 34]
@@ -13,11 +13,6 @@ values = ctx.values
 print(f"Generated {len(values)} observations")
 ```
 
-```python {#cell-1}
-# New cell
-hello = 5
-print(hello)
-```
 
 ```python {#summarize depends-on=generate}
 values = ctx.values

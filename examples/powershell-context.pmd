@@ -1,0 +1,26 @@
+---
+pmd: '0.1'
+title: PowerShell and Python context
+---
+
+
+# PowerShell and Python context
+
+This Windows example writes JSON context in PowerShell and consumes it from an
+isolated Python process.
+
+```powershell {#powershell-setup independent=true}
+Set-CtxValue greeting "hello from PowerShell"
+Set-CtxValue samples @(3, 6, 9, 12)
+Write-Output "PowerShell prepared $(Get-CtxValue greeting)"
+```
+
+```python {#python-consumer depends-on=powershell-setup}
+ctx.total = sum(ctx.samples)
+print(f"{ctx.greeting}: total={ctx.total}")
+```
+
+```python {#verify-powershell role=test test-of=python-consumer}
+assert ctx.greeting == "hello from PowerShell"
+assert ctx.total == 30
+```

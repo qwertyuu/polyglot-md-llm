@@ -1,7 +1,7 @@
 # Proposal 0001: UTF-8-safe cell source transmission
 
 **Status:** Implemented (0.3.0)
-**Fixes:** [known-issues.md → BUG-1](../known-issues.md#bug-1-non-ascii-in-a-code-cell-crashes-with-a-misleading-pep-263-error)
+**Fixes:** [known-issues.md → BUG-1](../docs/known-issues.md#bug-1-non-ascii-in-a-code-cell-crashes-with-a-misleading-pep-263-error)
 **Touches:** `spec.md` §5.4 (process isolation), `runner.py` (`Runner.run`)
 
 ## Motivation

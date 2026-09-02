@@ -1,4 +1,4 @@
-# PMD Agent Protocol
+# PMD Agent Protocol Specification
 
 **Specification - Draft v0.1**  
 **Status:** Draft companion specification for PMD 0.1.  
