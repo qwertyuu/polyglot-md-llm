@@ -1,0 +1,28 @@
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/
+.build/
+
+# Package distributions & build output
+dist/
+build/
+*.egg-info/
+
+# Environments
+venv/
+.venv/
+env/
+
+# PMD outputs & cache
+pmd-outputs/
+.cache/
+
+# IDE & System
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
