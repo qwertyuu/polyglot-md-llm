@@ -4,7 +4,7 @@
 
 **Title**
 
-Show HN: Polyglot PMD - plain-text notebooks with explicit dependencies
+Show HN: Polyglot PMD - plain-text notebooks for agents and CI
 
 **URL**
 
@@ -14,15 +14,18 @@ https://github.com/qwertyuu/polyglot-md-llm
 
 Hi HN,
 
-I built Polyglot PMD because I wanted notebooks that behave like normal source
-files: readable diffs, explicit dependencies, no hidden in-memory state, and a
-document that remains useful when the runtime is gone.
+I built Polyglot PMD because I wanted notebooks that coding agents could inspect
+and edit without operating on an opaque file format, and that would fare better
+in version control and CI. That meant readable diffs, explicit dependencies,
+deterministic test commands, no hidden in-memory state, and a document that
+remains useful when the runtime is gone.
 
 A `.pmd` file is ordinary Markdown with fenced code cells. Python, shell,
 PowerShell, and SQL cells run in separate OS processes. Cells can exchange small
 JSON values through `ctx`, larger artifacts through declared output files, and
 shared source through explicit library cells. A dependency graph controls order
-and cache invalidation.
+and cache invalidation. Because the document is still Markdown, Git and agents
+can both work with the source using ordinary text tooling.
 
 Here is a complete example:
 
@@ -63,10 +66,13 @@ artifacts, declared input fingerprints, library-cell source composition,
 Python/SQL workflows, and JSON context crossing between Python and both POSIX
 shell and PowerShell.
 
-The other experiment in the project is an agent protocol for notebooks. An LLM
-can request a bounded semantic view, edit cells with revision and content-digest
-preconditions, inspect the execution plan, and receive a verification receipt.
-Execution is never implied by an edit and requires explicit host authorization.
+For agent interoperability, PMD also exposes semantic operations instead of
+requiring an agent to rewrite the whole document. An agent can request a bounded
+view, edit cells with revision and content-digest preconditions, inspect the
+affected execution plan, and receive a machine-readable verification receipt.
+Editing never implies execution; running code requires explicit host
+authorization. In CI, `pmd check` validates the document and graph. `pmd test`
+executes test cells and returns a normal process exit status.
 
 The important limitation: this is process isolation, not a security sandbox.
 Notebook code runs with the invoking user's filesystem and network permissions.
@@ -74,8 +80,8 @@ The project reports that boundary directly rather than claiming otherwise.
 
 PMD is alpha software, MIT licensed, and currently has 95 passing tests. I would
 especially value feedback on the file format, the separation between context and
-file outputs, and whether the agent protocol solves problems people actually see
-when using coding agents with notebooks.
+file outputs, and whether these agent and CI primitives address the failure modes
+people actually encounter with notebooks.
 
 Repository: https://github.com/qwertyuu/polyglot-md-llm
 
