@@ -42,18 +42,16 @@ assert ctx.average > 0
 ```
 ````
 
-Run it from a clone with Python 3.10+:
+Run it from a clone with `uv`; there is no virtualenv to create or package to
+install:
 
 ```console
 git clone https://github.com/qwertyuu/polyglot-md-llm.git
 cd polyglot-md-llm
-python -m venv .venv
-# activate the environment for your shell
-python -m pip install polyglot-pmd
-pmd check examples/basic.pmd --graph
-pmd run examples/basic.pmd --fresh --verbose
-pmd test examples/basic.pmd --fresh
-pmd render examples/basic.pmd --to html --out example.html
+uvx --from polyglot-pmd pmd check examples/basic.pmd --graph
+uvx --from polyglot-pmd pmd run examples/basic.pmd --fresh --verbose
+uvx --from polyglot-pmd pmd test examples/basic.pmd --fresh
+uvx --from polyglot-pmd pmd render examples/basic.pmd --to html --out example.html
 ```
 
 The HTML report is self-contained. It includes source, graph, stdout/stderr, and
@@ -85,7 +83,7 @@ Repository: https://github.com/qwertyuu/polyglot-md-llm
 
 - Enable GitHub private vulnerability reporting so the `SECURITY.md` link works.
 - Confirm the CI workflow is green on Linux and Windows.
-- Create a fresh virtual environment and run the commands above verbatim.
+- Run the `uvx` commands above verbatim from a fresh clone.
 - Add one screenshot or short GIF of the rendered report to the README if it
   communicates more than the text example.
 - Confirm the public PyPI installation in a clean virtual environment.

@@ -12,6 +12,21 @@ only the Python standard library and PMD's built-in engines.
 | [`powershell-context.pmd`](powershell-context.pmd) | PowerShell context helpers consumed by Python | Windows |
 | [`v0.6/`](v0.6/) | SQL, typed outputs, calls, sweeps, document tests, agent verification, attestations | all |
 
+## Run with uv
+
+Use `uvx` to run the published CLI in an isolated, cached environment. No
+virtualenv activation or package installation is required:
+
+```console
+uvx --from polyglot-pmd pmd check examples/basic.pmd --graph
+uvx --from polyglot-pmd pmd test examples/artifacts.pmd --fresh --verbose --out-dir pmd-outputs/artifacts
+uvx --from polyglot-pmd pmd check examples/composition.pmd --strict-inputs --graph
+uvx --from polyglot-pmd pmd test examples/v0.6/notebook.pmd --fresh --verbose
+```
+
+For repeated use, run `uv tool install polyglot-pmd` once and use the shorter
+`pmd` commands below.
+
 ## Portable examples
 
 ```console

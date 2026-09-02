@@ -14,18 +14,16 @@ execution model inside a binary file format.
 
 ## Quickstart
 
-Python 3.10 or newer is required. From a clone:
+With [uv](https://docs.astral.sh/uv/), no environment setup or package install is
+needed. `uvx` runs PMD in an isolated environment and caches it for later calls:
 
 ```console
-python -m venv .venv
-# Windows: .venv\Scripts\activate
-# macOS/Linux: source .venv/bin/activate
-python -m pip install -e ".[dev]"
-
-pmd check examples/basic.pmd --graph
-pmd run examples/basic.pmd --fresh --verbose
-pmd test examples/basic.pmd --fresh
-pmd render examples/basic.pmd --to html --out example.html
+git clone https://github.com/qwertyuu/polyglot-md-llm.git
+cd polyglot-md-llm
+uvx --from polyglot-pmd pmd check examples/basic.pmd --graph
+uvx --from polyglot-pmd pmd run examples/basic.pmd --fresh --verbose
+uvx --from polyglot-pmd pmd test examples/basic.pmd --fresh
+uvx --from polyglot-pmd pmd render examples/basic.pmd --to html --out example.html
 ```
 
 Open `example.html` to see the source, dependency graph, captured streams, and
@@ -34,12 +32,13 @@ rich outputs in one portable report. To create a standalone project instead:
 ```console
 mkdir my-analysis
 cd my-analysis
-python -m venv .venv
-# activate .venv for your shell, then:
-python -m pip install polyglot-pmd
+uv tool install polyglot-pmd
 pmd init .
 pmd workbench .
 ```
+
+`uv tool install` keeps `pmd` on your `PATH`. Run `uv tool update-shell` if uv
+reports that its tool directory is not currently on `PATH`.
 
 > PMD cells execute arbitrary code with the privileges of the user running
 > `pmd`. Review a document before running, testing, or rendering it.
@@ -123,7 +122,21 @@ automatically, so it does not need a `display.image()` call.
 
 ## Installation
 
-From this checkout:
+Run any PMD command without installing it:
+
+```console
+uvx --from polyglot-pmd pmd --version
+uvx --from polyglot-pmd pmd check examples/basic.pmd --graph
+```
+
+Or install the command persistently:
+
+```console
+uv tool install polyglot-pmd
+pmd --version
+```
+
+For development from this checkout:
 
 ```console
 python -m pip install -e ".[dev]"
