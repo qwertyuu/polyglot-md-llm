@@ -1,0 +1,400 @@
+---
+pmd: '0.1'
+title: 'Titanic survival: a reproducible Kaggle-style study'
+inputs:
+- data/train.csv
+- data/test.csv
+engines:
+  python:
+    command: python
+timeout_default: 180s
+---
+
+
+# Titanic survival: a reproducible Kaggle-style study
+
+This is a PMD replication of the analytical arc in Manav Sehgal's widely
+referenced Kaggle notebook, *Titanic Data Science Solutions*. It keeps the
+original themes -- audit, exploratory analysis, title and family feature
+engineering, classifier comparison, and submission generation -- while using
+stratified cross-validation instead of ranking models by training accuracy.
+
+The source data are the standard Kaggle Titanic competition train and test
+files. Their provenance and checksums are recorded in `data/README.md`.
+
+## Research questions
+
+1. Which passenger groups have the largest observed differences in survival?
+2. Do compact engineered features support useful out-of-fold classification?
+3. Can the complete analysis produce a schema-valid Kaggle submission from a
+   clean, dependency-aware run?
+
+```python {#ml_library role=lib}
+import pandas as pd
+
+from sklearn.compose import ColumnTransformer
+from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder, StandardScaler
+
+
+def engineer_features(frame):
+    result = frame.copy()
+    result["Title"] = result["Name"].str.extract(r" ([A-Za-z]+)\.", expand=False)
+    result["Title"] = result["Title"].replace(
+        {
+            "Mlle": "Miss",
+            "Ms": "Miss",
+            "Mme": "Mrs",
+            "Lady": "Rare",
+            "Countess": "Rare",
+            "Capt": "Rare",
+            "Col": "Rare",
+            "Don": "Rare",
+            "Dr": "Rare",
+            "Major": "Rare",
+            "Rev": "Rare",
+            "Sir": "Rare",
+            "Jonkheer": "Rare",
+            "Dona": "Rare",
+        }
+    )
+    result["FamilySize"] = result["SibSp"] + result["Parch"] + 1
+    result["IsAlone"] = (result["FamilySize"] == 1).astype(int)
+    result["FarePerPerson"] = result["Fare"] / result["FamilySize"]
+    return result.drop(columns=["Name", "Ticket", "Cabin"])
+
+
+def model_candidates(seed=42):
+    return {
+        "logistic_regression": LogisticRegression(max_iter=2000, C=1.0),
+        "random_forest": RandomForestClassifier(
+            n_estimators=350,
+            max_depth=7,
+            min_samples_leaf=2,
+            max_features="sqrt",
+            random_state=seed,
+            n_jobs=-1,
+        ),
+        "gradient_boosting": GradientBoostingClassifier(
+            n_estimators=150,
+            learning_rate=0.04,
+            max_depth=3,
+            random_state=seed,
+        ),
+    }
+
+
+def make_pipeline(model):
+    numeric = ["Age", "SibSp", "Parch", "Fare", "FamilySize", "IsAlone", "FarePerPerson"]
+    categorical = ["Pclass", "Sex", "Embarked", "Title"]
+    preprocess = ColumnTransformer(
+        [
+            (
+                "numeric",
+                Pipeline(
+                    [
+                        ("impute", SimpleImputer(strategy="median")),
+                        ("scale", StandardScaler()),
+                    ]
+                ),
+                numeric,
+            ),
+            (
+                "categorical",
+                Pipeline(
+                    [
+                        ("impute", SimpleImputer(strategy="most_frequent")),
+                        ("onehot", OneHotEncoder(handle_unknown="ignore", sparse_output=False)),
+                    ]
+                ),
+                categorical,
+            ),
+        ]
+    )
+    return Pipeline([("preprocess", preprocess), ("model", model)])
+```
+
+## 1. Data contract and audit
+
+```python {#audit independent=true role=setup tags=data}
+import hashlib
+import json
+
+import pandas as pd
+
+data_dir = project_root / "examples" / "research" / "titanic" / "data"
+train_path = data_dir / "train.csv"
+test_path = data_dir / "test.csv"
+train = pd.read_csv(train_path)
+test = pd.read_csv(test_path)
+
+required_train = {
+    "PassengerId", "Survived", "Pclass", "Name", "Sex", "Age",
+    "SibSp", "Parch", "Ticket", "Fare", "Cabin", "Embarked",
+}
+required_test = required_train - {"Survived"}
+assert set(train.columns) == required_train
+assert set(test.columns) == required_test
+assert train["PassengerId"].is_unique and test["PassengerId"].is_unique
+assert set(train["Survived"].unique()) == {0, 1}
+
+audit = {
+    "train_rows": int(len(train)),
+    "test_rows": int(len(test)),
+    "train_columns": int(train.shape[1]),
+    "test_columns": int(test.shape[1]),
+    "survival_rate": round(float(train["Survived"].mean()), 4),
+    "missing_train": {key: int(value) for key, value in train.isna().sum().items() if value},
+    "train_sha256": hashlib.sha256(train_path.read_bytes()).hexdigest(),
+    "test_sha256": hashlib.sha256(test_path.read_bytes()).hexdigest(),
+}
+output_path("audit.json").write_text(json.dumps(audit, indent=2), encoding="utf-8")
+
+ctx.train_rows = audit["train_rows"]
+ctx.test_rows = audit["test_rows"]
+ctx.survival_rate = audit["survival_rate"]
+print(json.dumps(audit, indent=2))
+```
+
+The audit makes the sample size, missingness, and exact input bytes part of the
+reader-visible record. It also fails immediately if the competition schema has
+drifted or passenger identifiers are duplicated.
+
+## 2. Exploratory evidence
+
+```python {#eda depends-on=audit tags=eda,viz}
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import pandas as pd
+
+data_dir = project_root / "examples" / "research" / "titanic" / "data"
+train = pd.read_csv(data_dir / "train.csv")
+
+grouped = (
+    train.groupby(["Sex", "Pclass"], as_index=False)
+    .agg(passengers=("Survived", "size"), survival_rate=("Survived", "mean"))
+    .sort_values(["Sex", "Pclass"])
+)
+grouped["survival_rate"] = grouped["survival_rate"].round(4)
+display.csv(grouped.to_dict(orient="records"), "survival_by_sex_class.csv")
+
+fig, axes = plt.subplots(1, 2, figsize=(11, 4.4))
+sex_rates = train.groupby("Sex")["Survived"].mean().sort_values()
+sex_rates.plot.bar(ax=axes[0], color=["#d65a31", "#287271"], rot=0)
+axes[0].set(title="Observed survival by sex", ylabel="Survival rate", ylim=(0, 1))
+
+class_sex = train.pivot_table(index="Pclass", columns="Sex", values="Survived", aggfunc="mean")
+class_sex.plot.bar(ax=axes[1], color=["#287271", "#d65a31"], rot=0)
+axes[1].set(title="Survival by class and sex", xlabel="Passenger class", ylabel="Survival rate", ylim=(0, 1))
+fig.tight_layout()
+display.figure(fig, "survival-patterns.png", dpi=160)
+plt.close(fig)
+
+ctx.female_survival_rate = round(float(sex_rates["female"]), 4)
+ctx.male_survival_rate = round(float(sex_rates["male"]), 4)
+ctx.first_class_survival_rate = round(float(train.loc[train.Pclass == 1, "Survived"].mean()), 4)
+ctx.third_class_survival_rate = round(float(train.loc[train.Pclass == 3, "Survived"].mean()), 4)
+print(grouped.to_string(index=False))
+```
+
+This is descriptive evidence, not a causal claim. Sex and passenger class are
+strongly associated with survival in the observed manifest, but the data do
+not identify why any individual survived.
+
+## 3. Deterministic feature engineering
+
+```python {#prepare depends-on=audit tags=features uses=ml_library}
+import pandas as pd
+
+data_dir = project_root / "examples" / "research" / "titanic" / "data"
+train = pd.read_csv(data_dir / "train.csv")
+test = pd.read_csv(data_dir / "test.csv")
+
+train_features = engineer_features(train)
+test_features = engineer_features(test)
+assert "Survived" in train_features and "Survived" not in test_features
+assert list(train_features.drop(columns="Survived").columns) == list(test_features.columns)
+
+train_features.to_csv(output_path("train-features.csv"), index=False)
+test_features.to_csv(output_path("test-features.csv"), index=False)
+
+ctx.feature_columns = list(test_features.columns)
+ctx.engineered_feature_count = int(test_features.shape[1])
+ctx.rare_title_count = int((train_features["Title"] == "Rare").sum())
+print(f"Prepared {len(train_features)} training and {len(test_features)} test rows")
+print(f"Model inputs: {', '.join(ctx.feature_columns)}")
+```
+
+The engineered columns mirror the reference notebook's useful compact ideas:
+honorific title, family size, and travelling alone. Missing-value imputation
+and category encoding remain inside each cross-validation fold to avoid using
+validation-fold statistics during training.
+
+## 4. Model comparison with out-of-fold evaluation
+
+```python {#compare depends-on=prepare tags=model,viz uses=ml_library}
+import json
+
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import pandas as pd
+from sklearn.model_selection import StratifiedKFold, cross_validate
+
+frame = pd.read_csv(outputs.path("prepare", "train-features.csv"))
+X = frame.drop(columns="Survived")
+y = frame["Survived"].astype(int)
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+rows = []
+for name, model in model_candidates().items():
+    result = cross_validate(
+        make_pipeline(model),
+        X,
+        y,
+        cv=cv,
+        scoring={"accuracy": "accuracy", "roc_auc": "roc_auc"},
+        n_jobs=1,
+    )
+    rows.append(
+        {
+            "model": name,
+            "cv_accuracy_mean": float(result["test_accuracy"].mean()),
+            "cv_accuracy_std": float(result["test_accuracy"].std()),
+            "cv_roc_auc_mean": float(result["test_roc_auc"].mean()),
+            "fit_seconds_mean": float(result["fit_time"].mean()),
+        }
+    )
+
+scores = pd.DataFrame(rows).sort_values("cv_accuracy_mean", ascending=False).reset_index(drop=True)
+scores.to_csv(output_path("model-scores.csv"), index=False)
+
+fig, ax = plt.subplots(figsize=(8.5, 4.5))
+ordered = scores.sort_values("cv_accuracy_mean")
+ax.barh(ordered["model"], ordered["cv_accuracy_mean"], xerr=ordered["cv_accuracy_std"], color="#287271")
+ax.set(xlabel="5-fold CV accuracy", xlim=(0.72, 0.86), title="Leakage-resistant model comparison")
+ax.grid(axis="x", alpha=0.25)
+fig.tight_layout()
+display.figure(fig, "model-comparison.png", dpi=160)
+plt.close(fig)
+
+best = scores.iloc[0]
+ctx.best_model = str(best["model"])
+ctx.best_cv_accuracy = round(float(best["cv_accuracy_mean"]), 4)
+ctx.best_cv_roc_auc = round(float(best["cv_roc_auc_mean"]), 4)
+ctx.models_evaluated = int(len(scores))
+print(scores.round(4).to_string(index=False))
+print(f"Selected {ctx.best_model}: accuracy={ctx.best_cv_accuracy}, ROC AUC={ctx.best_cv_roc_auc}")
+```
+
+## 5. Final fit and Kaggle submission
+
+```python {#final_fit depends-on=prepare,compare tags=model,artifact uses=ml_library}
+import json
+import pickle
+
+import pandas as pd
+
+train = pd.read_csv(outputs.path("prepare", "train-features.csv"))
+test = pd.read_csv(outputs.path("prepare", "test-features.csv"))
+X = train.drop(columns="Survived")
+y = train["Survived"].astype(int)
+
+models = model_candidates()
+assert ctx.best_model in models
+pipeline = make_pipeline(models[ctx.best_model])
+pipeline.fit(X, y)
+predictions = pipeline.predict(test).astype(int)
+
+submission = pd.DataFrame(
+    {"PassengerId": test["PassengerId"].astype(int), "Survived": predictions}
+)
+submission.to_csv(output_path("submission.csv"), index=False)
+output_path("model.pkl").write_bytes(pickle.dumps(pipeline))
+
+manifest = {
+    "selected_model": ctx.best_model,
+    "cv_accuracy": ctx.best_cv_accuracy,
+    "cv_roc_auc": ctx.best_cv_roc_auc,
+    "training_rows": int(len(train)),
+    "prediction_rows": int(len(submission)),
+    "predicted_survival_rate": round(float(submission["Survived"].mean()), 4),
+}
+output_path("run-manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+ctx.prediction_rows = manifest["prediction_rows"]
+ctx.predicted_survival_rate = manifest["predicted_survival_rate"]
+print(json.dumps(manifest, indent=2))
+```
+
+The submission is a competition artifact, not a claim about historical truth.
+Kaggle's hidden test labels are unavailable locally, so the defensible quality
+estimate is the declared out-of-fold score above.
+
+## 6. Executable research contracts
+
+```python {#test_audit role=test test-of=audit}
+import json
+
+audit = json.loads(outputs.path("audit", "audit.json").read_text(encoding="utf-8"))
+assert audit["train_rows"] == 891
+assert audit["test_rows"] == 418
+assert audit["train_sha256"] == "7d118fef8b6ccf7f81111877bc388536f7b1e498a655e3d649d19aaa010e9f6f"
+assert audit["test_sha256"] == "56023b9948236f3c7a1c9448fcf418b283e109ef177fa8c7e069158dd7dd52b2"
+assert audit["missing_train"]["Age"] == 177
+```
+
+```python {#test_eda role=test test-of=eda}
+chart = outputs.path("eda", "survival-patterns.png")
+assert chart.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+assert ctx.female_survival_rate > ctx.male_survival_rate + 0.4
+assert ctx.first_class_survival_rate > ctx.third_class_survival_rate + 0.35
+```
+
+```python {#test_features role=test test-of=prepare}
+import pandas as pd
+
+train = pd.read_csv(outputs.path("prepare", "train-features.csv"))
+test = pd.read_csv(outputs.path("prepare", "test-features.csv"))
+assert len(train) == ctx.train_rows and len(test) == ctx.test_rows
+assert {"Title", "FamilySize", "IsAlone", "FarePerPerson"}.issubset(test.columns)
+assert list(train.drop(columns="Survived").columns) == list(test.columns)
+```
+
+```python {#test_models role=test test-of=compare}
+import pandas as pd
+
+scores = pd.read_csv(outputs.path("compare", "model-scores.csv"))
+assert len(scores) == 3
+assert scores["cv_accuracy_mean"].between(0.75, 0.90).all()
+assert scores["cv_roc_auc_mean"].between(0.78, 0.92).all()
+assert ctx.best_cv_accuracy >= 0.80
+assert outputs.path("compare", "model-comparison.png").read_bytes().startswith(b"\x89PNG")
+```
+
+```python {#test_submission role=test test-of=final_fit}
+import json
+import pickle
+
+import pandas as pd
+
+submission = pd.read_csv(outputs.path("final_fit", "submission.csv"))
+manifest = json.loads(outputs.path("final_fit", "run-manifest.json").read_text(encoding="utf-8"))
+model = pickle.loads(outputs.path("final_fit", "model.pkl").read_bytes())
+assert list(submission.columns) == ["PassengerId", "Survived"]
+assert len(submission) == 418 and submission["PassengerId"].is_unique
+assert set(submission["Survived"].unique()).issubset({0, 1})
+assert 0.25 < submission["Survived"].mean() < 0.55
+assert manifest["prediction_rows"] == len(submission)
+assert hasattr(model, "predict")
+```
+
+## Conclusion
+
+The useful result is not only a score. The notebook records exactly which
+inputs produced the audit, figures, engineered tables, model comparison,
+serialized pipeline, and submission; each claim above is connected to an
+executable cell or test.
