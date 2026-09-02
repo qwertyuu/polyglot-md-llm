@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 - 2026-08-25
 
 - Fix `pmd init` to generate `.venv/bin/python` on POSIX instead of the
   Windows-only `.venv/Scripts/python.exe` path.

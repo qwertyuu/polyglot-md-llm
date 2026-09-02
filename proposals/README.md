@@ -47,9 +47,9 @@ could become a dated `spec.md` addendum or `agent-spec.md` section if accepted
 | [0025](0025-streaming-execution-events.md) | Streaming execution events | Implemented (0.6.0) | PMD 0.5.0 field report 4.5 |
 | [0026](0026-structured-failures.md) | Structured execution failures | Implemented (0.6.0) | PMD 0.5.0 field report 4.6 |
 | [0027](0027-shipped-agent-skill.md) | Capability-synchronized agent skill | Implemented (0.6.0) | Agent adoption of new PMD features |
-| [0028](0028-platform-native-init.md) | Platform-native `pmd init` path | Implemented (next patch release) | POSIX initialization failure |
-| [0029](0029-typed-output-cache-key-integrity.md) | Typed-output cache-key integrity | Implemented (next patch release) | Cache and receipt evidence |
-| [0030](0030-concurrent-freshness-writes.md) | Concurrent freshness writes | Implemented (next patch release) | Windows cache concurrency |
+| [0028](0028-platform-native-init.md) | Platform-native `pmd init` path | Implemented (0.6.1) | POSIX initialization failure |
+| [0029](0029-typed-output-cache-key-integrity.md) | Typed-output cache-key integrity | Implemented (0.6.1) | Cache and receipt evidence |
+| [0030](0030-concurrent-freshness-writes.md) | Concurrent freshness writes | Implemented (0.6.1) | Windows cache concurrency |
 
 ## How to review one
 

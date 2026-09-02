@@ -1,6 +1,6 @@
 # Proposal 0028: Platform-native `pmd init` interpreter path
 
-**Status:** Implemented (next patch release)
+**Status:** Implemented (0.6.1)
 **Fixes:** `pmd init` writes a Windows interpreter path on POSIX
 **Touches:** project initialization and portable-engine documentation
 
